@@ -44,8 +44,8 @@ jobs:
           pyenv global 2.7.18
           python2 --version
 
-      # 5️⃣ Build QEMU-CGC 64-bit (adaptive memory & jobs)
-      - name: Build QEMU-CGC 64-bit (adaptive)
+      # 5️⃣ Build QEMU-CGC 64-bit safely (split jobs)
+      - name: Build QEMU-CGC 64-bit (memory-safe)
         run: |
           export PATH="$HOME/.pyenv/bin:$PATH"
           eval "$(pyenv init --path)"
@@ -60,29 +60,30 @@ jobs:
                       --disable-system \
                       --disable-tools
 
-          # Set a high number of open files
+          # High open files
           ulimit -n 65536
 
-          # Detect total RAM in KB and CPU cores
+          # Total RAM and CPU
           MEM_KB=$(grep MemTotal /proc/meminfo | awk '{print $2}')
           MEM_GB=$(( MEM_KB / 1024 / 1024 ))
           CPU_CORES=$(nproc)
           echo "Detected RAM: ${MEM_GB} GB, CPU cores: $CPU_CORES"
 
-          # Use ~75% of RAM for build; avoid overcommit
+          # Limit ~75% of RAM
           MEM_LIMIT=$(( MEM_KB * 75 / 100 ))
           echo "Limiting virtual memory to ${MEM_LIMIT} KB (~75% of total RAM)"
           ulimit -v $MEM_LIMIT
 
-          # Determine optimal make jobs:
-          # 1 job per ~1.5GB RAM, but do not exceed CPU cores or 8 jobs
-          JOBS=$(( MEM_GB * 1024 / 1500 ))  # Convert GB to MB and divide
+          # 1️⃣ Stage 1: Build common library (1 job)
+          make -j1 libqemu-all.a
+
+          # 2️⃣ Stage 2: Build x86_64 user binary
+          # Optimal jobs: min(CPU_CORES, 8, 1 job per 1.5GB RAM)
+          JOBS=$(( MEM_GB * 1024 / 1500 ))
           if [ "$JOBS" -lt 1 ]; then JOBS=1; fi
           if [ "$JOBS" -gt 8 ]; then JOBS=8; fi
           if [ "$JOBS" -gt "$CPU_CORES" ]; then JOBS=$CPU_CORES; fi
-          echo "Using $JOBS parallel make jobs"
-
-          # Build only QEMU user x86_64
+          echo "Using $JOBS parallel make jobs for qemu-user/qemu64"
           make -j$JOBS qemu-user/qemu64
 
       # 6️⃣ Verify binary
@@ -105,7 +106,7 @@ jobs:
           path: qemu-cgc/qemu-user/qemu64/qemu-x86_64
           if-no-files-found: error
 
-      # 8️⃣ Download artifact (for release step)
+      # 8️⃣ Download artifact for release
       - name: Download qemu-cgc artifact
         uses: actions/download-artifact@v4
         with:
