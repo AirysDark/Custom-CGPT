@@ -1,116 +1,106 @@
-name: Build qemu-cgc x86_64
+name: Build Custom-CGPT (Optimized + QEMU Precompile)
 
 on:
-  workflow_dispatch:
-    inputs:
-      release_tag:
-        description: 'Release tag to create (e.g., v1.0.0)'
-        required: true
-        default: 'v1.0.0-qc'
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
 
 jobs:
   build-qemu:
     runs-on: ubuntu-24.04
+    env:
+      PYENV_ROOT: ${{ runner.home }}/.pyenv
+      PATH: ${{ runner.home }}/.pyenv/bin:${{ runner.home }}/.pyenv/shims:$PATH
 
     steps:
-      # 1️⃣ Checkout repository
-      - name: Checkout repository
-        uses: actions/checkout@v4
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 1
 
-      # 2️⃣ Install dependencies
-      - name: Install dependencies
-        run: |
-          sudo apt update
-          sudo apt install -y build-essential git ninja-build \
-            libglib2.0-dev libfdt-dev libpixman-1-dev zlib1g-dev tree tar \
-            libffi-dev libssl-dev libbz2-dev libreadline-dev libsqlite3-dev \
-            wget llvm libncurses5-dev libncursesw5-dev xz-utils tk-dev curl
+    - name: Install system dependencies
+      run: |
+        sudo apt update
+        sudo apt install -y build-essential git ninja-build \
+          libglib2.0-dev libfdt-dev libpixman-1-dev zlib1g-dev \
+          libffi-dev libssl-dev libbz2-dev libreadline-dev libsqlite3-dev \
+          wget llvm libncurses5-dev libncursesw5-dev xz-utils tk-dev curl \
+          uuid-dev tcl-dev tk-dev libx11-dev libxext-dev libxrender-dev \
+          libxft-dev libxau-dev libxdmcp-dev libxcb1-dev x11proto-core-dev \
+          x11proto-dev xorg-sgml-doctools xtrans-dev
 
-      # 3️⃣ Prepare QEMU-CGC folder
-      - name: Prepare QEMU-CGC folder
-        run: |
-          mkdir -p qemu-cgc
-          cp -r cgc_env/qemu-cgc/* qemu-cgc/   # copies everything, including cgc_configure_opt
+    - name: Cache Python 2.7 (pyenv)
+      uses: actions/cache@v4
+      with:
+        path: ~/.pyenv
+        key: ${{ runner.os }}-python2.7.18
 
-      # 4️⃣ Install pyenv & Python2
-      - name: Install pyenv & Python2
-        run: |
+    - name: Install Python 2.7 via pyenv
+      run: |
+        if [ ! -d "$PYENV_ROOT" ]; then
           curl https://pyenv.run | bash
-          export PATH="$HOME/.pyenv/bin:$PATH"
-          eval "$(pyenv init --path)"
-          eval "$(pyenv init -)"
-          eval "$(pyenv virtualenv-init -)"
-          pyenv install -s 2.7.18
-          pyenv global 2.7.18
-          python2 --version
+        fi
+        export PATH="$PYENV_ROOT/bin:$PATH"
+        eval "$(pyenv init --path)"
+        eval "$(pyenv init -)"
+        eval "$(pyenv virtualenv-init -)"
+        pyenv install -s 2.7.18
+        pyenv global 2.7.18
+        python2 --version
 
-      # 5️⃣ Build QEMU-CGC 64-bit (optimized)
-      - name: Build QEMU-CGC 64-bit
-        run: |
-          export PATH="$HOME/.pyenv/bin:$PATH"
-          eval "$(pyenv init --path)"
-          eval "$(pyenv init -)"
-          eval "$(pyenv virtualenv-init -)"
+    - name: Prepare QEMU build
+      run: |
+        mkdir -p qemu-cgc/build
+        cp -r cgc_env/qemu-cgc/* qemu-cgc/
+        cd qemu-cgc
+        chmod +x configure cgc_configure_opt
+        sed -i 's/x86_64-linux-user//g' cgc_configure_opt
 
-          cd qemu-cgc
-          chmod +x configure
-          chmod +x cgc_configure_opt
+    - name: Cache QEMU precompiled objects & binary
+      uses: actions/cache@v4
+      with:
+        path: |
+          qemu-cgc/build
+          qemu-cgc/qemu-user/qemu64
+        key: ${{ runner.os }}-qemu-cgc-${{ hashFiles('qemu-cgc/**') }}
+        restore-keys: |
+          ${{ runner.os }}-qemu-cgc-
 
-          # Optional: replace default target if needed
-          sed -i 's/x86_64-linux-user//g' cgc_configure_opt
+    - name: Build QEMU-CGC safely
+      run: |
+        cd qemu-cgc
 
-          # Set resource limits
-          ulimit -n 65536
-          MEM_KB=$(grep MemTotal /proc/meminfo | awk '{print $2}')
-          MEM_LIMIT=$(( MEM_KB * 75 / 100 ))
-          ulimit -v $MEM_LIMIT
+        # Safe memory & parallel jobs
+        MEM_KB=$(grep MemTotal /proc/meminfo | awk '{print $2}')
+        MEM_LIMIT=$(( MEM_KB * 50 / 100 ))
+        ulimit -v $MEM_LIMIT
+        CPU_CORES=$(nproc)
+        JOBS=$(( MEM_KB / (4*1024*1024) ))
+        if [ "$JOBS" -lt 1 ]; then JOBS=1; fi
+        if [ "$JOBS" -gt "$CPU_CORES" ]; then JOBS=$CPU_CORES; fi
+        if [ "$JOBS" -gt 2 ]; then JOBS=2; fi
+        echo "Using $JOBS parallel jobs"
 
-          # Determine safe parallel jobs
-          CPU_CORES=$(nproc)
-          JOBS=$(( MEM_KB / (4*1024*1024) ))
-          if [ "$JOBS" -lt 1 ]; then JOBS=1; fi
-          if [ "$JOBS" -gt "$CPU_CORES" ]; then JOBS=$CPU_CORES; fi
-          if [ "$JOBS" -gt 8 ]; then JOBS=8; fi
-          echo "Using $JOBS parallel jobs"
-
-          # Configure and build
-          ./cgc_configure_opt
+        # Only build if binary does not exist
+        BIN="qemu-user/qemu64/qemu-x86_64"
+        if [ ! -f "$BIN" ]; then
+          ./cgc_configure_opt --disable-static
           make -j$JOBS qemu-user/qemu64
+        else
+          echo "✅ Using cached QEMU binary"
+        fi
 
-          # Verify
-          BIN="qemu-user/qemu64/qemu-x86_64"
-          if [ -f "$BIN" ]; then
-            echo "✅ Binary built successfully:"
-            file "$BIN"
-          else
-            echo "⚠️ Binary missing!"
-            exit 1
-          fi
+        # Verify
+        if [ -f "$BIN" ]; then
+          file "$BIN"
+        else
+          echo "⚠️ Binary missing!"
+          exit 1
+        fi
 
-      # 6️⃣ Upload 64-bit CGC binary
-      - name: Upload 64-bit CGC binary
-        uses: actions/upload-artifact@v4
-        with:
-          name: qemu-cgc-64bit
-          path: qemu-cgc/qemu-user/qemu64/qemu-x86_64
-          if-no-files-found: error
-
-      # 7️⃣ Download artifact (for release step)
-      - name: Download qemu-cgc artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: qemu-cgc-64bit
-          path: artifact
-
-      # 8️⃣ Create GitHub Release and upload artifact
-      - name: Create Release and Upload
-        uses: ncipollo/release-action@v1
-        with:
-          tag: ${{ github.event.inputs.release_tag }}
-          name: "qemu-cgc 64bit"
-          token: ${{ secrets.RELEASE_TOKEN }}
-          artifacts: artifact/
-
-      # 9️⃣ Optional: Workspace tree (debug)
-      - name: Workspace tree (debug)
-        run: tree -L 3 qemu-cgc/qemu-user/qemu64 || true
+    - name: Upload QEMU artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: qemu-cgc-binary
+        path: qemu-cgc/qemu-user/qemu64/qemu-x86_64
