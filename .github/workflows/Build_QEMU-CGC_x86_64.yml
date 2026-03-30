@@ -1,4 +1,4 @@
-name: Build qemu-cgc x86_64
+name: Build qemu-cgc x86_64 (with ccache)
 
 on:
   workflow_dispatch:
@@ -17,14 +17,18 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # 2️⃣ Install dependencies
+      # 2️⃣ Install dependencies + ccache
       - name: Install dependencies
         run: |
           sudo apt update
-          sudo apt install -y build-essential git ninja-build \
+          sudo apt install -y build-essential git ninja-build ccache \
             libglib2.0-dev libfdt-dev libpixman-1-dev zlib1g-dev tree tar \
             libffi-dev libssl-dev libbz2-dev libreadline-dev libsqlite3-dev \
             wget llvm libncurses5-dev libncursesw5-dev xz-utils tk-dev curl
+
+          # Enable ccache globally
+          export PATH="/usr/lib/ccache:$PATH"
+          ccache -V
 
       # 3️⃣ Copy qemu-cgc folder
       - name: Copy qemu-cgc folder
@@ -44,13 +48,14 @@ jobs:
           pyenv global 2.7.18
           python2 --version
 
-      # 5️⃣ Build QEMU-CGC (max optimized)
-      - name: Build QEMU-CGC 64-bit (adaptive memory & jobs)
+      # 5️⃣ Build QEMU-CGC with ccache and adaptive memory
+      - name: Build QEMU-CGC 64-bit (ccache & optimized)
         run: |
           export PATH="$HOME/.pyenv/bin:$PATH"
           eval "$(pyenv init --path)"
           eval "$(pyenv init -)"
           eval "$(pyenv virtualenv-init -)"
+          export PATH="/usr/lib/ccache:$PATH"
 
           cd qemu-cgc
           chmod +x configure
@@ -58,28 +63,28 @@ jobs:
                       --target-list=x86_64-linux-user \
                       --disable-werror \
                       --disable-system \
-                      --disable-tools
+                      --disable-tools \
+                      CC="ccache gcc" CXX="ccache g++"
 
-          # Set a high number of open files
+          # High number of open files
           ulimit -n 65536
 
           # Detect total RAM in KB
           MEM_KB=$(grep MemTotal /proc/meminfo | awk '{print $2}')
           MEM_GB=$((MEM_KB / 1024 / 1024))
-          echo "💾 Detected RAM: ${MEM_GB} GB"
+          echo "Detected RAM: ${MEM_GB} GB"
 
-          # Use ~80% of RAM for build to avoid crashes
+          # Limit virtual memory to ~80% of total RAM
           MEM_LIMIT=$(( MEM_KB * 80 / 100 ))
-          echo "💾 Limiting virtual memory to ${MEM_LIMIT} KB (~80% of total RAM)"
           ulimit -v $MEM_LIMIT
+          echo "Virtual memory limit: ${MEM_LIMIT} KB (~80% of total RAM)"
 
-          # Determine optimal make jobs:
-          # 1 job per ~1.5GB of RAM, min 1, max 8
+          # Adaptive make jobs: 1 per ~1.5GB RAM, min 1, max 8
           JOBS=$(( MEM_KB / 1500000 ))
           if [ "$JOBS" -lt 1 ]; then JOBS=1; fi
           if [ "$MEM_GB" -lt 4 ]; then JOBS=1; fi
           if [ "$JOBS" -gt 8 ]; then JOBS=8; fi
-          echo "⚡ Using $JOBS parallel make jobs"
+          echo "Using $JOBS parallel make jobs"
 
           # Build only QEMU user x86_64
           make -j$JOBS qemu-user/qemu64
@@ -89,10 +94,10 @@ jobs:
         run: |
           BIN="qemu-cgc/qemu-user/qemu64/qemu-x86_64"
           if [ -f "$BIN" ]; then
-            echo "✅ Binary found:"
+            echo "Binary found:"
             file "$BIN"
           else
-            echo "⚠️ Binary missing!"
+            echo "Binary missing!"
             exit 1
           fi
 
