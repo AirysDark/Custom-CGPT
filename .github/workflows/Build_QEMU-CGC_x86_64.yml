@@ -30,7 +30,7 @@ jobs:
       - name: Prepare QEMU-CGC folder
         run: |
           mkdir -p qemu-cgc
-          cp -r cgc_env/qemu-cgc/* qemu-cgc/   # copies everything, including cgc_configure_opt
+          cp -r cgc_env/qemu-cgc/* qemu-cgc/
 
       # 4️⃣ Install pyenv & Python2
       - name: Install pyenv & Python2
@@ -44,7 +44,7 @@ jobs:
           pyenv global 2.7.18
           python2 --version
 
-      # 5️⃣ Build QEMU-CGC 64-bit (optimized)
+      # 5️⃣ Configure & Build QEMU-CGC safely
       - name: Build QEMU-CGC 64-bit
         run: |
           export PATH="$HOME/.pyenv/bin:$PATH"
@@ -53,38 +53,27 @@ jobs:
           eval "$(pyenv virtualenv-init -)"
 
           cd qemu-cgc
-          chmod +x configure
-          chmod +x cgc_configure_opt
-
-          # Optional: replace default target if needed
+          chmod +x configure cgc_configure_opt
           sed -i 's/x86_64-linux-user//g' cgc_configure_opt
 
-          # Set resource limits
-          ulimit -n 65536
-          MEM_KB=$(grep MemTotal /proc/meminfo | awk '{print $2}')
-          MEM_LIMIT=$(( MEM_KB * 75 / 100 ))
-          ulimit -v $MEM_LIMIT
-
-          # Determine safe parallel jobs
-          CPU_CORES=$(nproc)
-          JOBS=$(( MEM_KB / (4*1024*1024) ))
-          if [ "$JOBS" -lt 1 ]; then JOBS=1; fi
-          if [ "$JOBS" -gt "$CPU_CORES" ]; then JOBS=$CPU_CORES; fi
-          if [ "$JOBS" -gt 8 ]; then JOBS=8; fi
+          # Determine safe parallel jobs (max 2)
+          JOBS=2
           echo "Using $JOBS parallel jobs"
 
-          # Configure and build
-          ./cgc_configure_opt
-          make -j$JOBS qemu-user/qemu64
+          # Retry build in case of transient segmentation faults
+          for i in {1..2}; do
+              echo "Attempt $i to build QEMU-CGC..."
+              make -j$JOBS qemu-user/qemu64 && break || echo "⚠️ Segfault detected, retrying..."
+          done
 
-          # Verify
+          # Verify binary
           BIN="qemu-user/qemu64/qemu-x86_64"
           if [ -f "$BIN" ]; then
-            echo "✅ Binary built successfully:"
-            file "$BIN"
+              echo "✅ Binary built successfully:"
+              file "$BIN"
           else
-            echo "⚠️ Binary missing!"
-            exit 1
+              echo "⚠️ Binary missing!"
+              exit 1
           fi
 
       # 6️⃣ Upload 64-bit CGC binary
