@@ -1,14 +1,13 @@
 name: Build qemu-cgc x86_64
 
 on:
-#  push:
-#    branches: [main]
   workflow_dispatch:
     inputs:
       release_tag:
         description: 'Release tag to create (e.g., v1.0.0)'
         required: true
         default: 'v1.0.0-qc'
+
 jobs:
   build-qemu:
     runs-on: ubuntu-24.04 
@@ -18,12 +17,14 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # 2️⃣ Install dependencies
+      # 2️⃣ Install system dependencies
       - name: Install dependencies
         run: |
           sudo apt update
-          sudo apt install -y python2 build-essential git ninja-build \
-            libglib2.0-dev libfdt-dev libpixman-1-dev zlib1g-dev tree tar
+          sudo apt install -y build-essential git ninja-build \
+            libglib2.0-dev libfdt-dev libpixman-1-dev zlib1g-dev tree tar \
+            libffi-dev libssl-dev libbz2-dev libreadline-dev libsqlite3-dev \
+            wget llvm libncurses5-dev libncursesw5-dev xz-utils tk-dev curl
 
       # 3️⃣ Copy qemu-cgc folder from repo
       - name: Copy qemu-cgc folder
@@ -31,15 +32,9 @@ jobs:
           mkdir -p qemu-cgc
           cp -r cgc_env/qemu-cgc/* qemu-cgc/
 
+      # 4️⃣ Install pyenv & Python2
       - name: Install pyenv & Python2
         run: |
-          # Install dependencies
-          sudo apt update
-          sudo apt install -y build-essential curl git libffi-dev libssl-dev zlib1g-dev \
-          libbz2-dev libreadline-dev libsqlite3-dev wget llvm \
-          libncurses5-dev libncursesw5-dev xz-utils tk-dev
-
-          # Install pyenv
           curl https://pyenv.run | bash
 
           # Setup pyenv environment
@@ -48,39 +43,37 @@ jobs:
           eval "$(pyenv init -)"
           eval "$(pyenv virtualenv-init -)"
 
-          # Install Python2.7
-          pyenv install 2.7.18
+          # Install Python 2.7
+          pyenv install -s 2.7.18
           pyenv global 2.7.18
 
           # Verify
           python2 --version
 
+      # 5️⃣ Build QEMU-CGC 64-bit
       - name: Build QEMU-CGC 64-bit
         run: |
-          # Setup pyenv for this step
           export PATH="$HOME/.pyenv/bin:$PATH"
           eval "$(pyenv init --path)"
           eval "$(pyenv init -)"
           eval "$(pyenv virtualenv-init -)"
 
-          # Prepare source
           cd qemu-cgc
           chmod +x configure
 
-          # Configure using python2 from pyenv
           ./configure --python=python2 \
-                --target-list=x86_64-linux-user \
-                --disable-werror \
-                --disable-system \
-                --disable-tools
+                      --target-list=x86_64-linux-user \
+                      --disable-werror \
+                      --disable-system \
+                      --disable-tools
 
           ulimit -n 65536
           make -j1 qemu-user/qemu64
 
-      # 5️⃣ Verify the binary exists
+      # 6️⃣ Verify the binary exists
       - name: Verify binary
         run: |
-          BIN="qemu-cgc/x86_64-linux-user/qemu-x86_64"
+          BIN="qemu-cgc/qemu-user/qemu64/qemu-x86_64"
           if [ -f "$BIN" ]; then
             echo "✅ Binary found:"
             file "$BIN"
@@ -89,22 +82,22 @@ jobs:
             exit 1
           fi
 
-      # 6️⃣ Upload the 64-bit CGC artifact
+      # 7️⃣ Upload the 64-bit CGC artifact
       - name: Upload 64-bit CGC binary
         uses: actions/upload-artifact@v4
         with:
           name: qemu-cgc-64bit
-          path: qemu-cgc/x86_64-linux-user/qemu-x86_64
+          path: qemu-cgc/qemu-user/qemu64/qemu-x86_64
           if-no-files-found: error
 
-      # 7. Download the artifact from the build job
+      # 8️⃣ Download the artifact from the build job (optional)
       - name: Download qemu-cgc artifact
         uses: actions/download-artifact@v4
         with:
           name: qemu-cgc-64bit
           path: artifact
 
-      # 8. Create GitHub Release and upload artifact
+      # 9️⃣ Create GitHub Release and upload artifact
       - name: Create Release and Upload
         uses: ncipollo/release-action@v1
         with:
@@ -113,6 +106,6 @@ jobs:
           token: ${{ secrets.RELEASE_TOKEN }}
           artifacts: artifact/
 
-      # 7️⃣ Optional: print a short workspace tree for verification
+      # 🔟 Optional: print a short workspace tree for verification
       - name: Workspace tree (debug)
-        run: tree -L 3 qemu-cgc/x86_64-linux-user || true
+        run: tree -L 3 qemu-cgc/qemu-user/qemu64 || true
