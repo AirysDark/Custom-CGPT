@@ -1,4 +1,4 @@
-name: Build qemu-cgc x86_64 (dynamic split-build)
+name: Build qemu-cgc x86_64
 
 on:
   workflow_dispatch:
@@ -44,8 +44,8 @@ jobs:
           pyenv global 2.7.18
           python2 --version
 
-      # 5️⃣ Build QEMU-CGC (dynamic split)
-      - name: Build QEMU-CGC 64-bit (dynamic split)
+      # 5️⃣ Build QEMU-CGC 64-bit (adaptive jobs, safe RAM)
+      - name: Build QEMU-CGC 64-bit
         run: |
           export PATH="$HOME/.pyenv/bin:$PATH"
           eval "$(pyenv init --path)"
@@ -60,50 +60,27 @@ jobs:
                       --disable-system \
                       --disable-tools
 
-          # Set high file limit
+          # High file descriptor limit
           ulimit -n 65536
 
-          # Detect total RAM (KB) and CPU cores
+          # Detect RAM (GB) and CPU cores
           MEM_KB=$(grep MemTotal /proc/meminfo | awk '{print $2}')
           MEM_GB=$(( MEM_KB / 1024 / 1024 ))
           CPU_CORES=$(nproc)
           echo "Detected RAM: ${MEM_GB} GB, CPU cores: $CPU_CORES"
 
-          # Use ~75% of RAM for build
-          MEM_LIMIT=$(( MEM_KB * 75 / 100 ))
-          ulimit -v $MEM_LIMIT
-          echo "Limiting virtual memory to $MEM_LIMIT KB (~75% of RAM)"
-
-          # Determine per-job RAM (2GB recommended)
-          PER_JOB_MEM=$((2 * 1024 * 1024))
-          MAX_JOBS=$(( MEM_LIMIT / PER_JOB_MEM ))
-          if [ "$MAX_JOBS" -lt 1 ]; then MAX_JOBS=1; fi
-          if [ "$MAX_JOBS" -gt "$CPU_CORES" ]; then MAX_JOBS=$CPU_CORES; fi
+          # Compute max parallel jobs: ~2GB RAM per job, limit to cores and max 8
+          MAX_JOBS=$(( MEM_GB / 2 ))
           if [ "$MAX_JOBS" -gt 8 ]; then MAX_JOBS=8; fi
-          echo "Using up to $MAX_JOBS parallel jobs per chunk"
+          if [ "$MAX_JOBS" -gt "$CPU_CORES" ]; then MAX_JOBS=$CPU_CORES; fi
+          if [ "$MAX_JOBS" -lt 1 ]; then MAX_JOBS=1; fi
+          echo "Using $MAX_JOBS parallel jobs"
 
-          # Collect all object files
-          OBJ_FILES=$(make -n qemu-user/qemu64 | grep -oE '\S+\.o')
-          TOTAL_OBJS=$(echo "$OBJ_FILES" | wc -l)
-          echo "Total object files: $TOTAL_OBJS"
+          # Optional: cap virtual memory per job (~3GB per job)
+          ulimit -v $((3*1024*1024))
 
-          # Split into chunks of ~50% RAM each
-          CHUNK_SIZE=$(( TOTAL_OBJS / MAX_JOBS ))
-          if [ "$CHUNK_SIZE" -lt 1 ]; then CHUNK_SIZE=1; fi
-
-          echo "Chunk size: $CHUNK_SIZE objects"
-
-          START=0
-          while [ "$START" -lt "$TOTAL_OBJS" ]; do
-            END=$(( START + CHUNK_SIZE ))
-            if [ "$END" -gt "$TOTAL_OBJS" ]; then END=$TOTAL_OBJS; fi
-            echo "Building objects $START to $END..."
-            CHUNK_OBJS=$(echo "$OBJ_FILES" | sed -n "$((START+1)),$END p")
-            make -j$MAX_JOBS qemu-user/qemu64 OBJ_CHUNK="$CHUNK_OBJS" || \
-              { echo "❌ Chunk build failed; retrying with half jobs"; \
-                make -j$((MAX_JOBS/2)) qemu-user/qemu64 OBJ_CHUNK="$CHUNK_OBJS"; }
-            START=$END
-          done
+          # Build only QEMU user x86_64
+          make -j$MAX_JOBS qemu-user/qemu64
 
       # 6️⃣ Verify binary
       - name: Verify binary
@@ -117,7 +94,7 @@ jobs:
             exit 1
           fi
 
-      # 7️⃣ Upload artifact
+      # 7️⃣ Upload 64-bit CGC binary
       - name: Upload 64-bit CGC binary
         uses: actions/upload-artifact@v4
         with:
@@ -125,14 +102,14 @@ jobs:
           path: qemu-cgc/qemu-user/qemu64/qemu-x86_64
           if-no-files-found: error
 
-      # 8️⃣ Download artifact
-      - name: Download artifact
+      # 8️⃣ Download artifact (for release step)
+      - name: Download qemu-cgc artifact
         uses: actions/download-artifact@v4
         with:
           name: qemu-cgc-64bit
           path: artifact
 
-      # 9️⃣ Create GitHub Release
+      # 9️⃣ Create GitHub Release and upload artifact
       - name: Create Release and Upload
         uses: ncipollo/release-action@v1
         with:
