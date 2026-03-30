@@ -66,4 +66,5 @@ jobs:
         with:
           tag: ${{ github.event.inputs.release_tag }}
           name: "cgc2elf x86_64"
-          files: artifact/
+          token: ${{ secrets.PAT_TOKEN }}
+          artifacts: artifact/
