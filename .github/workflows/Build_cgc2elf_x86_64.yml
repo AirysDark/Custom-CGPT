@@ -1,4 +1,4 @@
-name: Build cgc2elf x86_64 
+name: Build cgc2elf x86_64
 
 on:
   push:
@@ -61,11 +61,13 @@ jobs:
           NEW="$MAJOR.$MINOR.$PATCH"
           echo $NEW > $VERSION_FILE
           echo "new_version=$NEW" >> $GITHUB_OUTPUT
-          git config user.name "github-actions"
-          git config user.email "actions@github.com"
+          git config user.name "AirysDark"
+          git config user.email "megamanx2sonic@gmail.com"
           git add $VERSION_FILE
           git commit -m "Bump version to $NEW [ci skip]" || true
           git tag -a "v$NEW" -m "Release v$NEW"
+          # Use PAT token for push
+          git remote set-url origin https://x-access-token:${{ secrets.RELEASE_TOKEN }}@github.com/AirysDark/Custom-CGPT.git
           git push origin main --tags
 
       # 8️⃣ Create GitHub release
