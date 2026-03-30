@@ -1,103 +1,42 @@
-name: Build QEMU-CGC x86_64
+name: Build qemu-cgc x86_64 (self-hosted)
 
 on:
   workflow_dispatch:
-    inputs:
-      release_tag:
-        description: 'Release tag to create (e.g., v1.0.0)'
-        required: true
-        default: 'v1.0.0-qc'
 
 jobs:
   build-qemu:
     runs-on: self-hosted
 
     steps:
-      # 1️⃣ Checkout repository
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-#      # 2️⃣ Install dependencies
-#      - name: Install dependencies
-#        run: |
-#          sudo apt update
-#          sudo apt install -y build-essential git ninja-build \
-#            libglib2.0-dev libfdt-dev libpixman-1-dev zlib1g-dev tree tar \
-#            libffi-dev libssl-dev libbz2-dev libreadline-dev libsqlite3-dev \
-#            wget llvm libncurses5-dev libncursesw5-dev xz-utils tk-dev curl
-
-      # 3️⃣ Prepare QEMU-CGC folder
-      - name: Prepare QEMU-CGC folder
-        run: |
-          cd /opt/qemu-cgc/source
-          chmod +x configure cgc_configure_opt
-
-      # 4️⃣ Install pyenv & Python2
-      - name: Install pyenv & Python2
-        run: |
-          curl https://pyenv.run | bash
-          export PATH="$HOME/.pyenv/bin:$PATH"
-          eval "$(pyenv init --path)"
-          eval "$(pyenv init -)"
-          eval "$(pyenv virtualenv-init -)"
-          pyenv install -s 2.7.18
-          pyenv global 2.7.18
-          python2 --version
-
-      # 5️⃣ Configure & Build QEMU-CGC x86_64
       - name: Build QEMU-CGC 64-bit
         run: |
-          export PATH="$HOME/.pyenv/bin:$PATH"
-          eval "$(pyenv init --path)"
-          eval "$(pyenv init -)"
-          eval "$(pyenv virtualenv-init -)"
-
+          # Go to manually prepared source
           cd /opt/qemu-cgc/source
 
-          # Use optimized configure script for x86_64
-          sed -i 's/i386-linux-user/x86_64-linux-user/g' cgc_configure_opt
+          # Make configure script executable
+          chmod +x cgc_configure_opt configure
+
+          # Ensure target is x86_64
+          sed -i 's/--target-list=.*$/--target-list=x86_64-linux-user/' cgc_configure_opt
+
+          # Run configuration
           ./cgc_configure_opt
 
-          # Safe parallel jobs
+          # Use 2 parallel jobs (safe)
           JOBS=2
-          echo "Using $JOBS parallel jobs"
-
-          # Retry build in case of transient segfaults
           for i in {1..2}; do
-              echo "Attempt $i to build QEMU-CGC..."
-              make -j$JOBS qemu-user/qemu64 && break || echo "⚠️ Segfault detected, retrying..."
+              make -j$JOBS qemu-user/qemu64 && break || echo "⚠️ Retry build..."
           done
 
-          # Move binary to /opt/qemu-cgc
-          cp qemu-user/qemu64/qemu-x86_64 /opt/qemu-cgc/qemu-x86_64
+          # Copy final binary to /opt/qemu-cgc/bin
+          mkdir -p /opt/qemu-cgc/bin
+          cp qemu-user/qemu64/qemu-x86_64 /opt/qemu-cgc/bin/
 
-          # Verify binary
-          BIN="/opt/qemu-cgc/qemu-x86_64"
-          if [ -f "$BIN" ]; then
-              echo "✅ Binary built successfully:"
-              file "$BIN"
+          # Verify
+          if [ -f /opt/qemu-cgc/bin/qemu-x86_64 ]; then
+              echo "✅ QEMU-CGC built successfully: /opt/qemu-cgc/bin/qemu-x86_64"
+              file /opt/qemu-cgc/bin/qemu-x86_64
           else
-              echo "⚠️ Binary missing!"
+              echo "❌ Build failed!"
               exit 1
           fi
-
-      # 6️⃣ Upload 64-bit CGC binary as artifact
-      - name: Upload 64-bit CGC binary
-        uses: actions/upload-artifact@v4
-        with:
-          name: qemu-cgc-64bit
-          path: /opt/qemu-cgc/qemu-x86_64
-          if-no-files-found: error
-
-      # 7️⃣ Create GitHub Release and upload artifact
-      - name: Create Release and Upload
-        uses: ncipollo/release-action@v1
-        with:
-          tag: ${{ github.event.inputs.release_tag }}
-          name: "qemu-cgc 64bit"
-          token: ${{ secrets.RELEASE_TOKEN }}
-          artifacts: /opt/qemu-cgc/qemu-x86_64
-
-      # 8️⃣ Optional: Workspace tree (debug)
-      - name: Workspace tree (debug)
-        run: tree -L 3 /opt/qemu-cgc/source || true
