@@ -10,11 +10,11 @@ jobs:
     runs-on: ubuntu-latest
     
     steps:
-      # 1️⃣ Checkout repository
+      # 1. Checkout repository
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # 2️⃣ Install dependencies
+      # 2. Install dependencies
       - name: Install dependencies
         run: |
           sudo apt update
@@ -38,13 +38,13 @@ jobs:
             pyyaml \
             matplotlib
 
-      # 3️⃣ Copy libcgc folder (sources + headers)
+      # 3. Copy libcgc folder (sources + headers)
       - name: Copy libcgc folder
         run: |
           mkdir -p libcgc
           cp -r cgc_env/libcgc/* libcgc
 
-      # 4️⃣ Build libcgc (Force 64-bit)
+      # 4 Build libcgc (Force 64-bit)
       - name: Build libcgc
         run: |
           cd libcgc
@@ -61,20 +61,20 @@ jobs:
           # Build target binaries
           ninja cgc pov
 
-      # 5️⃣ Verify Build Artifacts
+      # 5. Verify Build Artifacts
       - name: Verify Architecture
         run: |
           echo "🔍 Checking shared libraries..."
           if [ -f libcgc/build64/include/libcgc.so ]; then
             file libcgc/build64/include/libcgc.so
           else
-            echo "⚠️ libcgc.so not found"
+            echo "libcgc.so not found"
           fi
 
           if [ -f libcgc/build64/include/libpov/libpov.so ]; then
             file libcgc/build64/include/libpov/libpov.so
           else
-            echo "⚠️ libpov.so not found"
+            echo "libpov.so not found"
           fi
 
           echo "🔍 Checking a sample challenge binary..."
@@ -82,10 +82,10 @@ jobs:
           if [ -f "$SAMPLE_BIN" ]; then
             file "$SAMPLE_BIN"
           else
-            echo "⚠️ No binaries found in build64/challenges"
+            echo "No binaries found in build64/challenges"
           fi
 
-      # 6️⃣ Upload Artifacts for cgctk
+      # 6. Upload Artifacts for cgctk
       - name: Upload libcgc-64bit-artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -97,8 +97,8 @@ jobs:
           if-no-files-found: error
           retention-days: 5
 
-      # 7️⃣ Debug Output
+      # 7. Debug Output
       - name: Workspace Summary
         run: |
-          echo "✅ Build Complete. Directory Structure:"
+          echo "Build Complete. Directory Structure:"
           tree -L 3 libcgc/build64
