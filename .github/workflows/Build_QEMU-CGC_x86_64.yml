@@ -44,8 +44,8 @@ jobs:
           pyenv global 2.7.18
           python2 --version
 
-      # 5️⃣ Build QEMU-CGC (max optimized)
-      - name: Build QEMU-CGC 64-bit (adaptive memory & jobs)
+      # 5️⃣ Build QEMU-CGC 64-bit (adaptive memory & jobs)
+      - name: Build QEMU-CGC 64-bit (adaptive)
         run: |
           export PATH="$HOME/.pyenv/bin:$PATH"
           eval "$(pyenv init --path)"
@@ -63,22 +63,23 @@ jobs:
           # Set a high number of open files
           ulimit -n 65536
 
-          # Detect total RAM in KB
+          # Detect total RAM in KB and CPU cores
           MEM_KB=$(grep MemTotal /proc/meminfo | awk '{print $2}')
-          MEM_GB=$((MEM_KB / 1024 / 1024))
-          echo "Detected RAM: ${MEM_GB} GB"
+          MEM_GB=$(( MEM_KB / 1024 / 1024 ))
+          CPU_CORES=$(nproc)
+          echo "Detected RAM: ${MEM_GB} GB, CPU cores: $CPU_CORES"
 
-          # Use ~80% of RAM for build to avoid crashes
-          MEM_LIMIT=$(( MEM_KB * 80 / 100 ))
-          echo "Limiting virtual memory to ${MEM_LIMIT} KB (~80% of total RAM)"
+          # Use ~75% of RAM for build; avoid overcommit
+          MEM_LIMIT=$(( MEM_KB * 75 / 100 ))
+          echo "Limiting virtual memory to ${MEM_LIMIT} KB (~75% of total RAM)"
           ulimit -v $MEM_LIMIT
 
           # Determine optimal make jobs:
-          # 1 job per ~1.5GB of RAM, min 1, max 8
-          JOBS=$(( MEM_KB / 1500000 ))
+          # 1 job per ~1.5GB RAM, but do not exceed CPU cores or 8 jobs
+          JOBS=$(( MEM_GB * 1024 / 1500 ))  # Convert GB to MB and divide
           if [ "$JOBS" -lt 1 ]; then JOBS=1; fi
-          if [ "$MEM_GB" -lt 4 ]; then JOBS=1; fi
           if [ "$JOBS" -gt 8 ]; then JOBS=8; fi
+          if [ "$JOBS" -gt "$CPU_CORES" ]; then JOBS=$CPU_CORES; fi
           echo "Using $JOBS parallel make jobs"
 
           # Build only QEMU user x86_64
@@ -89,10 +90,10 @@ jobs:
         run: |
           BIN="qemu-cgc/qemu-user/qemu64/qemu-x86_64"
           if [ -f "$BIN" ]; then
-            echo "Binary found:"
+            echo "✅ Binary found:"
             file "$BIN"
           else
-            echo "Binary missing!"
+            echo "⚠️ Binary missing!"
             exit 1
           fi
 
