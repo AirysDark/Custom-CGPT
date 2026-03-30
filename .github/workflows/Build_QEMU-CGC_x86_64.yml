@@ -1,39 +1,41 @@
-name: Build qemu-cgc x86_64
+name: Build QEMU-CGC
 
 on:
+  push:
+    branches:
+      - main
   workflow_dispatch:
-    inputs:
-      release_tag:
-        description: 'Release tag to create (e.g., v1.0.0)'
-        required: true
-        default: 'v1.0.0-qc'
 
 jobs:
   build-qemu:
     runs-on: ubuntu-24.04
-
     steps:
-      # 1️⃣ Checkout repository
+
+      # 1️⃣ Checkout the repository
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
 
-      # 2️⃣ Install dependencies
-      - name: Install dependencies
+      # 2️⃣ Install system dependencies
+      - name: Install system packages
         run: |
           sudo apt update
-          sudo apt install -y build-essential git ninja-build \
-            libglib2.0-dev libfdt-dev libpixman-1-dev zlib1g-dev tree tar \
+          sudo apt install -y \
+            build-essential git ninja-build \
+            libglib2.0-dev libfdt-dev libpixman-1-dev zlib1g-dev \
             libffi-dev libssl-dev libbz2-dev libreadline-dev libsqlite3-dev \
-            wget llvm libncurses5-dev libncursesw5-dev xz-utils tk-dev curl
+            wget llvm libncurses5-dev libncursesw5-dev xz-utils tk-dev curl \
+            tree tar uuid-dev libpng-dev libpng-tools
 
-      # 3️⃣ Prepare QEMU-CGC folder
-      - name: Prepare QEMU-CGC folder
+      # 3️⃣ Prepare QEMU-CGC environment
+      - name: Prepare QEMU-CGC
         run: |
           mkdir -p qemu-cgc
           cp -r cgc_env/qemu-cgc/* qemu-cgc/
 
-      # 4️⃣ Install pyenv & Python2
-      - name: Install pyenv & Python2
+      # 4️⃣ Setup Python 2.7 via pyenv
+      - name: Setup Python 2.7
         run: |
           curl https://pyenv.run | bash
           export PATH="$HOME/.pyenv/bin:$PATH"
@@ -44,29 +46,21 @@ jobs:
           pyenv global 2.7.18
           python2 --version
 
-      # 5️⃣ Configure & Build QEMU-CGC safely
-      - name: Build QEMU-CGC 64-bit
+      # 5️⃣ Build QEMU-CGC using custom configure
+      - name: Build QEMU-CGC
         run: |
-          export PATH="$HOME/.pyenv/bin:$PATH"
-          eval "$(pyenv init --path)"
-          eval "$(pyenv init -)"
-          eval "$(pyenv virtualenv-init -)"
-
           cd qemu-cgc
-          chmod +x configure cgc_configure_opt
-          sed -i 's/x86_64-linux-user//g' cgc_configure_opt
+          chmod +x cgc_configure_opt
+          ./cgc_configure_opt
 
-          # Determine safe parallel jobs (max 2)
           JOBS=2
           echo "Using $JOBS parallel jobs"
 
-          # Retry build in case of transient segmentation faults
           for i in {1..2}; do
               echo "Attempt $i to build QEMU-CGC..."
-              make -j$JOBS qemu-user/qemu64 && break || echo "⚠️ Segfault detected, retrying..."
+              make -j$JOBS qemu-user/qemu64 && break || echo "⚠️ Build failed, retrying..."
           done
 
-          # Verify binary
           BIN="qemu-user/qemu64/qemu-x86_64"
           if [ -f "$BIN" ]; then
               echo "✅ Binary built successfully:"
@@ -75,31 +69,3 @@ jobs:
               echo "⚠️ Binary missing!"
               exit 1
           fi
-
-      # 6️⃣ Upload 64-bit CGC binary
-      - name: Upload 64-bit CGC binary
-        uses: actions/upload-artifact@v4
-        with:
-          name: qemu-cgc-64bit
-          path: qemu-cgc/qemu-user/qemu64/qemu-x86_64
-          if-no-files-found: error
-
-      # 7️⃣ Download artifact (for release step)
-      - name: Download qemu-cgc artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: qemu-cgc-64bit
-          path: artifact
-
-      # 8️⃣ Create GitHub Release and upload artifact
-      - name: Create Release and Upload
-        uses: ncipollo/release-action@v1
-        with:
-          tag: ${{ github.event.inputs.release_tag }}
-          name: "qemu-cgc 64bit"
-          token: ${{ secrets.RELEASE_TOKEN }}
-          artifacts: artifact/
-
-      # 9️⃣ Optional: Workspace tree (debug)
-      - name: Workspace tree (debug)
-        run: tree -L 3 qemu-cgc/qemu-user/qemu64 || true
