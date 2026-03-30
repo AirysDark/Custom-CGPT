@@ -1,0 +1,64 @@
+name: Build QEMU-CGC x86_64
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build-qemu:
+    runs-on: ubuntu-22.04
+
+    steps:
+      # 1️⃣ Checkout repository
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # 2️⃣ Install dependencies
+      - name: Install dependencies
+        run: |
+          sudo apt update
+          sudo apt install -y python2 build-essential git ninja-build \
+            libglib2.0-dev libfdt-dev libpixman-1-dev zlib1g-dev tree tar
+
+      # 3️⃣ Copy qemu-cgc folder from repo
+      - name: Copy qemu-cgc folder
+        run: |
+          mkdir -p qemu-cgc
+          cp -r cgc_env/qemu-cgc/* qemu-cgc/
+
+      # 4️⃣ Configure and build 64-bit CGC target
+      - name: Build QEMU-CGC 64-bit
+        run: |
+          cd qemu-cgc
+          ./configure --python=python2 \
+                      --target-list=x86_64-linux-user \
+                      --static \
+                      --disable-werror \
+                      --disable-system \
+                      --disable-tools
+          make -j$(nproc)
+
+      # 5️⃣ Verify the binary exists
+      - name: Verify binary
+        run: |
+          BIN="qemu-cgc/x86_64-linux-user/qemu-x86_64"
+          if [ -f "$BIN" ]; then
+            echo "✅ Binary found:"
+            file "$BIN"
+          else
+            echo "⚠️ Binary missing!"
+            exit 1
+          fi
+
+      # 6️⃣ Upload the 64-bit CGC artifact
+      - name: Upload 64-bit CGC binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: qemu-cgc-64bit
+          path: qemu-cgc/x86_64-linux-user/qemu-x86_64
+          if-no-files-found: error
+
+      # 7️⃣ Optional: print a short workspace tree for verification
+      - name: Workspace tree (debug)
+        run: tree -L 3 qemu-cgc/x86_64-linux-user || true

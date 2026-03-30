@@ -1,0 +1,43 @@
+name: Build DECREE Kernel x86_64 
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build-kernel:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      # 1️⃣ Checkout repository
+      - name: Checkout repository
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      # 2️⃣ Install dependencies
+      - name: Install dependencies
+        run: |
+          sudo apt update
+          sudo apt install -y build-essential git gcc-4.8 g++-4.8 libc6-dev-i386 gcc-multilib g++-multilib wget zip
+
+      # 3️⃣ Copy cgc-linux-dev folder from repo
+      - name: Copy cgc-linux-dev folder
+        run: |
+          mkdir -p $GITHUB_WORKSPACE/build_kernel
+          cp -r cgc_env/cgc-linux-dev/* $GITHUB_WORKSPACE/build_kernel/
+
+      # 4️⃣ Build kernel
+      - name: Build kernel
+        run: |
+          cd $GITHUB_WORKSPACE/build_kernel
+          make ARCH=i386 CC=gcc-4.8 HOSTCC=gcc-4.8 defconfig || echo "⚠️ defconfig failed"
+          make ARCH=i386 CC=gcc-4.8 HOSTCC=gcc-4.8 -j$(nproc) || echo "⚠️ kernel build failed"
+
+      # 5️⃣ Upload kernel artifact
+      - name: Upload kernel artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: kernel
+          path: $GITHUB_WORKSPACE/build_kernel

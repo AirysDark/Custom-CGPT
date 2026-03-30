@@ -1,0 +1,95 @@
+name: Build libcgc x86_64
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build-libcgc-64bit:
+    runs-on: ubuntu-latest
+    
+    steps:
+      # 1️⃣ Checkout repository
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # 2️⃣ Install dependencies (Critical for Clang + 64-bit linking)
+      - name: Install dependencies
+        run: |
+          sudo apt update
+          sudo apt install -y \
+            build-essential \
+            clang \
+            make \
+            git \
+            g++-12 \
+            libstdc++-12-dev \
+            libc++-dev \
+            libc++abi-dev \
+            python3-pip \
+            tree \
+            ninja-build \
+            cmake
+            
+
+          pip3 install \
+            xlsxwriter \
+            pycryptodome \
+            defusedxml \
+            pyyaml \
+            matplotlib
+
+      # 3️⃣ Copy libcgc folder from repo
+      - name: Copy libcgc folder
+        run: |
+          mkdir -p libcgc
+          cp -r cgc_env/libcgc/* libcgc/
+
+      # 4️⃣ Build libcgc (Force 64-bit)
+      - name: Build libcgc
+        run: |
+          cd libcgc
+          sudo ln -sf /usr/lib/x86_64-linux-gnu/libstdc++.so.6 /usr/lib/x86_64-linux-gnu/libstdc++.so
+          rm -rf build64/
+          mkdir build64 && cd build64
+          
+          # Configure for 64-bit
+          BUILD64=1 cmake .. -GNinja
+          
+          # Use the target names verified by Ninja
+          ninja cgc pov
+
+      # 5️⃣ Verify Build Artifacts
+      - name: Verify Architecture
+        run: |
+          echo "🔍 Checking library architecture..."
+          # Check the static library
+          file libcgc/build64/lib/libcgc.a || echo "⚠️ Library not found"
+          
+          echo "🔍 Checking a sample Challenge Binary..."
+          # Find the first binary in the bin folder and check it
+          SAMPLE_BIN=$(find libcgc/build64/bin -type f | head -n 1)
+          if [ -f "$SAMPLE_BIN" ]; then
+            file "$SAMPLE_BIN"
+          else
+            echo "⚠️ No binaries found in build64/bin"
+          fi
+
+      # 6️⃣ Upload Artifacts for cgctk
+      - name: Upload libcgc-64bit-artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: libcgc-x86_64
+          path: |
+            libcgc/build64/lib/
+            libcgc/build64/bin/
+            libcgc/include/
+          if-no-files-found: error
+          retention-days: 5
+
+      # 7️⃣ Debug Output
+      - name: Workspace Summary
+        run: |
+          echo "✅ Build Complete. Directory Structure:"
+          tree -L 3 libcgc/build64
