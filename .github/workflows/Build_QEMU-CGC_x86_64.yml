@@ -53,7 +53,7 @@ jobs:
           eval "$(pyenv virtualenv-init -)"
 
           cd qemu-cgc
-          chmod +x ../cgc_configure_opt
+          chmod +x cgc_configure_opt
 
           # Use x86_64 target
           sed -i 's/x86_64-linux-user/' ../cgc_configure_opt
@@ -75,7 +75,7 @@ jobs:
           echo "Using $JOBS parallel jobs for build"
 
           # Configure and build
-          ../cgc_configure_opt
+          ./cgc_configure_opt
           make -j$JOBS qemu-user/qemu64
 
           # Verify
