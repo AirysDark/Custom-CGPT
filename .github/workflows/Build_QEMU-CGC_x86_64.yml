@@ -53,6 +53,7 @@ jobs:
           eval "$(pyenv virtualenv-init -)"
 
           cd qemu-cgc
+          chmod +x configure
           chmod +x cgc_configure_opt
 
           # Optional: replace default target if needed
