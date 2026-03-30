@@ -1,4 +1,4 @@
-name: Build cgc2elf x86_64
+name: Build & Release cgc2elf x86_64
 
 on:
   push:
@@ -6,46 +6,46 @@ on:
   workflow_dispatch:
     inputs:
       release_tag:
-        description: 'Release tag to create (e.g., v1.0.0)'
+        description: 'Release tag (e.g., v1.0.0)'
         required: true
         default: ''
 
 jobs:
-  build:
+  build-and-release:
     runs-on: ubuntu-24.04
 
     steps:
-      # 1. Checkout repository
-      - name: Checkout repo
+      # 1. Checkout repo
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      # 2. Install build tools ONLY (no pandoc)
-      - name: Install dependencies
+      # 2. Install dependencies
+      - name: Install build tools
         run: |
           sudo apt update
           sudo apt install -y build-essential git gcc
 
-      # 3. Copy cgc2elf folder from repo
+      # 3. Copy source folder
       - name: Copy cgc2elf folder
         run: |
           mkdir -p cgc2elf
           cp -r cgc_env/cgc2elf/* cgc2elf/
 
-      # 4. Build binary only
-      - name: Build cgc2elf binary
+      # 4. Build the binary
+      - name: Build cgc2elf
         run: |
           cd cgc2elf
           make clean || true
           make CFLAGS="-O2 -w -Wno-unused-result" cgc2elf
 
-      # 5. Verify binary exists
-      - name: Verify binary exists
+      # 5. Verify the binary exists
+      - name: Verify binary
         run: |
           ls -l cgc2elf
           file cgc2elf/cgc2elf
 
-      # 6. Upload artifact for reuse
-      - name: Upload binary artifact
+      # 6. Upload as GitHub Actions artifact
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: cgc2elf-binary
@@ -53,22 +53,13 @@ jobs:
           if-no-files-found: error
           retention-days: 5
 
-      # 7. Download the artifact from the build job
-      - name: Download cgc2elf artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: cgc2elf-binary
-          path: artifact
-
-      # After downloading artifact
-      - name: Extract cgc2elf artifact
-        run: unzip -o artifact/cgc2elf-binary.zip -d artifact_extracted
-
-      - name: Create Release and Upload
+      # 7. Create GitHub Release using the artifact
+      - name: Create Release and Attach Artifact
         uses: ncipollo/release-action@v1
         with:
           tag: ${{ github.event.inputs.release_tag }}
           name: "cgc2elf x86_64"
-          artifacts: artifact_extracted/cgc2elf   # <- single file now
-          token: ${{ secrets.RELEASE_TOKEN }}
+          artifacts: cgc2elf/cgc2elf   # direct path to built binary
+          token: ${{ secrets.GH_PAT }} # must be a PAT with repo access
           generateReleaseNotes: false
+          makeLatest: true
