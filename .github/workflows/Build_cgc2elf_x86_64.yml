@@ -1,4 +1,4 @@
-name: Build cgc2elf x86_64
+name: Build cgc2elf x86_64 
 
 on:
   push:
@@ -10,88 +10,39 @@ jobs:
     runs-on: ubuntu-24.04
 
     steps:
-      # 1️⃣ Checkout repository
+      # 1. Checkout
       - name: Checkout repo
         uses: actions/checkout@v4
 
-      # 2️⃣ Install build tools ONLY
+      # 2. Install build tools ONLY (no pandoc)
       - name: Install dependencies
         run: |
           sudo apt update
           sudo apt install -y build-essential git gcc
 
-      # 3️⃣ Copy cgc2elf folder from repo
+      # 3. Copy cgc2elf folder from repo
       - name: Copy cgc2elf folder
         run: |
           mkdir -p cgc2elf
           cp -r cgc_env/cgc2elf/* cgc2elf/
 
-      # 4️⃣ Build cgc2elf binary only
-      - name: Build cgc2elf binary
+      # 4. Build (NO man page)
+      - name: Build cgc2elf binary only
         run: |
           cd cgc2elf
           make clean || true
           make CFLAGS="-O2 -w -Wno-unused-result" cgc2elf
 
-      # 5️⃣ Verify binary exists
-      - name: Verify binary
+      # 5. VERIFY (so it NEVER silently fails again)
+      - name: Verify binary exists
         run: |
           ls -l cgc2elf
           file cgc2elf/cgc2elf
 
-      # 6️⃣ Upload EXACT binary as artifact
-      - name: Upload binary artifact
+      # 5. Upload EXACT file (correct path)
+      - name: Upload binary
         uses: actions/upload-artifact@v4
         with:
           name: cgc2elf-binary
           path: cgc2elf/cgc2elf
           if-no-files-found: error
-
-      # 7️⃣ Bump version automatically and push using PAT
-      - name: Bump Version
-        id: bump_version
-        run: |
-          VERSION_FILE="VERSION"
-          if [ ! -f "$VERSION_FILE" ]; then
-            echo "1.0.0" > "$VERSION_FILE"
-          fi
-          CURRENT=$(cat $VERSION_FILE)
-          IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT"
-          PATCH=$((PATCH+1))
-          NEW="$MAJOR.$MINOR.$PATCH"
-          echo $NEW > $VERSION_FILE
-          echo "new_version=$NEW" >> $GITHUB_OUTPUT
-
-          # Configure git
-          git config user.name "GitHub Actions"
-          git config user.email "actions@github.com"
-          
-          # Use PAT for push
-          git remote set-url origin https://x-access-token:${{ secrets.RELEASE_TOKEN }}@github.com/AirysDark/Custom-CGPT.git
-
-          git add $VERSION_FILE
-          git commit -m "Bump version to $NEW [ci skip]" || true
-          git tag -a "v$NEW" -m "Release v$NEW"
-          git push origin main --tags
-
-      # 8️⃣ Create GitHub Release
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: v${{ steps.bump_version.outputs.new_version }}
-          name: cgc2elf x86_64 v${{ steps.bump_version.outputs.new_version }}
-          body: "Automated build and release of cgc2elf x86_64 v${{ steps.bump_version.outputs.new_version }}"
-          draft: false
-          prerelease: false
-        env:
-          GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN }}
-
-      # 9️⃣ Upload release assets (attach the binary)
-      - name: Upload Release Assets
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: v${{ steps.bump_version.outputs.new_version }}
-          files: |
-            cgc2elf/cgc2elf
-        env:
-          GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN }}
