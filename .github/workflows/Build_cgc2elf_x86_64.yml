@@ -62,19 +62,19 @@ jobs:
           echo $NEW > $VERSION_FILE
           echo "new_version=$NEW" >> $GITHUB_OUTPUT
 
+          # Configure git
           git config user.name "GitHub Actions"
           git config user.email "actions@github.com"
+          
+          # Use PAT for push
+          git remote set-url origin https://x-access-token:${{ secrets.RELEASE_TOKEN }}@github.com/AirysDark/Custom-CGPT.git
 
           git add $VERSION_FILE
           git commit -m "Bump version to $NEW [ci skip]" || true
-          
           git tag -a "v$NEW" -m "Release v$NEW"
-          
-          # Use PAT for authenticated push
-          git remote set-url origin https://x-access-token:${{ secrets.RELEASE_TOKEN }}@github.com/${{ github.repository }}.git
           git push origin main --tags
 
-      # 8️⃣ Create GitHub release
+      # 8️⃣ Create GitHub Release
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
