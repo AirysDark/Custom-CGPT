@@ -8,13 +8,21 @@ on:
 jobs:
   build-libcgc-64bit:
     runs-on: ubuntu-latest
-    
+
     steps:
       # 1️⃣ Checkout repository
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # 2️⃣ Install dependencies (Critical for Clang + 64-bit linking)
+      # 2️⃣ Cache Python packages
+      - name: Cache Python packages
+        uses: actions/cache@v3
+        with:
+          path: ~/.cache/pip
+          key: python-pip-${{ runner.os }}-${{ hashFiles('**/requirements.txt') }}
+          restore-keys: python-pip-${{ runner.os }}-
+
+      # 3️⃣ Install dependencies
       - name: Install dependencies
         run: |
           sudo apt update
@@ -31,7 +39,6 @@ jobs:
             tree \
             ninja-build \
             cmake
-            
 
           pip3 install \
             xlsxwriter \
@@ -40,35 +47,42 @@ jobs:
             pyyaml \
             matplotlib
 
-      # 3️⃣ Copy libcgc folder from repo
+      # 4️⃣ Cache build output (Ninja / CMake)
+      - name: Cache libcgc build
+        uses: actions/cache@v3
+        with:
+          path: libcgc/build64
+          key: libcgc-build-${{ runner.os }}-${{ hashFiles('cgc_env/libcgc/**') }}
+          restore-keys: libcgc-build-${{ runner.os }}-
+
+      # 5️⃣ Copy libcgc folder
       - name: Copy libcgc folder
         run: |
           mkdir -p libcgc
           cp -r cgc_env/libcgc/* libcgc/
 
-      # 4️⃣ Build libcgc (Force 64-bit, static library)
+      # 6️⃣ Build libcgc (64-bit static)
       - name: Build libcgc
         run: |
           cd libcgc
-          sudo ln -sf /usr/lib/x86_64-linux-gnu/libstdc++.so.6 /usr/lib/x86_64-linux-gnu/libstdc++.so
           rm -rf build64/
           mkdir build64 && cd build64
           
-          # Configure CMake for static library
-          BUILD64=1 cmake .. -GNinja -DBUILD_SHARED_LIBS=OFF
-          
-          # Build cgc and pov targets
+          BUILD64=1 cmake .. -GNinja \
+            -DBUILD_SHARED_LIBS=OFF \
+            -DCMAKE_ARCHIVE_OUTPUT_DIRECTORY=$PWD/lib \
+            -DCMAKE_LIBRARY_OUTPUT_DIRECTORY=$PWD/lib \
+            -DCMAKE_RUNTIME_OUTPUT_DIRECTORY=$PWD/bin
+
           ninja cgc pov
 
-      # 5️⃣ Verify Build Artifacts
+      # 7️⃣ Verify Build Artifacts
       - name: Verify Architecture
         run: |
           echo "🔍 Checking library architecture..."
-          # Check the static library
           file libcgc/build64/lib/libcgc.a || echo "⚠️ Library not found"
           
           echo "🔍 Checking a sample Challenge Binary..."
-          # Find the first binary in the bin folder and check it
           SAMPLE_BIN=$(find libcgc/build64/bin -type f | head -n 1)
           if [ -f "$SAMPLE_BIN" ]; then
             file "$SAMPLE_BIN"
@@ -76,7 +90,7 @@ jobs:
             echo "⚠️ No binaries found in build64/bin"
           fi
 
-      # 6️⃣ Upload Artifacts for cgctk
+      # 8️⃣ Upload Artifacts
       - name: Upload libcgc-64bit-artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -88,7 +102,7 @@ jobs:
           if-no-files-found: error
           retention-days: 5
 
-      # 7️⃣ Debug Output
+      # 9️⃣ Workspace Summary
       - name: Workspace Summary
         run: |
           echo "✅ Build Complete. Directory Structure:"
