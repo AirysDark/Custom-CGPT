@@ -47,8 +47,8 @@ jobs:
           path: cgc2elf/cgc2elf
           if-no-files-found: error
 
-      # 7️⃣ Bump version automatically and push tags using PAT
-      - name: Bump Version and push
+      # 7️⃣ Bump version automatically and push using PAT
+      - name: Bump Version
         id: bump_version
         run: |
           VERSION_FILE="VERSION"
@@ -62,16 +62,19 @@ jobs:
           echo $NEW > $VERSION_FILE
           echo "new_version=$NEW" >> $GITHUB_OUTPUT
 
-          git config user.name "github-actions"
+          git config user.name "GitHub Actions"
           git config user.email "actions@github.com"
+
           git add $VERSION_FILE
           git commit -m "Bump version to $NEW [ci skip]" || true
           
-          # Use PAT for push
-          git remote set-url origin https://x-access-token:${{ secrets.RELEASE_TOKEN }}@github.com/AirysDark/Custom-CGPT.git
+          git tag -a "v$NEW" -m "Release v$NEW"
+          
+          # Use PAT for authenticated push
+          git remote set-url origin https://x-access-token:${{ secrets.RELEASE_TOKEN }}@github.com/${{ github.repository }}.git
           git push origin main --tags
 
-      # 8️⃣ Create GitHub Release
+      # 8️⃣ Create GitHub release
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
@@ -88,6 +91,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ steps.bump_version.outputs.new_version }}
-          files: cgc2elf/cgc2elf
+          files: |
+            cgc2elf/cgc2elf
         env:
           GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN }}
