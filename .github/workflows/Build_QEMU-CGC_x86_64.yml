@@ -34,14 +34,16 @@ jobs:
       # 4️⃣ Configure and build 64-bit CGC target
       - name: Build QEMU-CGC 64-bit
         run: |
-          cd qemu-cgc
-          chmod +x configure
-          ./configure --python=python2 \
-                      --target-list=x86_64-linux-user \
+           cd qemu-cgc
+           chmod +x configure
+           ./configure --python=python2 \
+                      --target-list=x86_64-linux-user/qemu64 \
                       --disable-werror \
                       --disable-system \
                       --disable-tools
-          make -j2 
+
+           ulimit -n 65536
+           make -j1 qemu-user/qemu64
 
       # 5️⃣ Verify the binary exists
       - name: Verify binary
