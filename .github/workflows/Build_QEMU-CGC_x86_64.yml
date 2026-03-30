@@ -56,7 +56,7 @@ jobs:
           chmod +x cgc_configure_opt
 
           # Optional: replace default target if needed
-          sed -i 's/x86_64-linux-user/' cgc_configure_opt
+          sed -i 's/x86_64-linux-user//g' cgc_configure_opt
 
           # Set resource limits
           ulimit -n 65536
