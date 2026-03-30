@@ -11,7 +11,7 @@ on:
         default: 'v1.0.0-qc'
 jobs:
   build-qemu:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04 
 
     steps:
       # 1️⃣ Checkout repository
@@ -43,7 +43,7 @@ jobs:
                       --disable-tools
 
            ulimit -n 65536
-           make -j1 qemu-user/qemu64
+           make -j1 qemu64
 
       # 5️⃣ Verify the binary exists
       - name: Verify binary
