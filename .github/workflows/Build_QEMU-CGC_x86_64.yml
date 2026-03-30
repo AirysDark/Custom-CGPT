@@ -41,7 +41,7 @@ jobs:
                       --disable-werror \
                       --disable-system \
                       --disable-tools
-          make -j1 
+          make -j2 
 
       # 5️⃣ Verify the binary exists
       - name: Verify binary
