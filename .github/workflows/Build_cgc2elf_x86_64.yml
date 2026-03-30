@@ -60,6 +60,6 @@ jobs:
           tag: ${{ github.event.inputs.release_tag }}
           name: "cgc2elf x86_64"
           artifacts: cgc2elf/cgc2elf   # direct path to built binary
-          token: ${{ secrets.GH_PAT }} # must be a PAT with repo access
+          token: ${{ secrets.RELEASE_TOKEN }} # must be a PAT with repo access
           generateReleaseNotes: false
           makeLatest: true
