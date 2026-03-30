@@ -8,30 +8,38 @@ jobs:
     runs-on: self-hosted
 
     steps:
-      - name: Build QEMU-CGC 64-bit
+      # 1️⃣ Prepare QEMU-CGC source
+      - name: Prepare source
         run: |
-          # Go to manually prepared source
           cd /opt/qemu-cgc/source
 
-          # Ensure target is x86_64
+      # 3️⃣ Configure & build QEMU-CGC
+      - name: Build QEMU-CGC 64-bit
+        run: |
+          cd /opt/qemu-cgc/source
+
+          # Enforce x86_64 target explicitly
           sed -i 's/--target-list=.*$/--target-list=x86_64-linux-user/' cgc_configure_opt
 
-          # Run configuration
-          ./cgc_configure_opt
+          # Ensure no i386 anywhere
+          grep -q 'i386' cgc_configure_opt && { echo "❌ Found i386 in configure, aborting"; exit 1; }
 
-          # Use 2 parallel jobs (safe)
+          # Run configuration with pyenv Python2
+          ./cgc_configure_opt --python=$(pyenv which python2)
+
+          # Safe build using 2 parallel jobs
           JOBS=2
           for i in {1..2}; do
               make -j$JOBS qemu-user/qemu64 && break || echo "⚠️ Retry build..."
           done
 
-          # Copy final binary to /opt/qemu-cgc/bin
+          # Copy final binary to bin
           mkdir -p /opt/qemu-cgc/bin
           cp qemu-user/qemu64/qemu-x86_64 /opt/qemu-cgc/bin/
 
           # Verify
           if [ -f /opt/qemu-cgc/bin/qemu-x86_64 ]; then
-              echo "✅ QEMU-CGC built successfully: /opt/qemu-cgc/bin/qemu-x86_64"
+              echo "✅ QEMU-CGC built successfully:"
               file /opt/qemu-cgc/bin/qemu-x86_64
           else
               echo "❌ Build failed!"
