@@ -26,12 +26,11 @@ jobs:
             libffi-dev libssl-dev libbz2-dev libreadline-dev libsqlite3-dev \
             wget llvm libncurses5-dev libncursesw5-dev xz-utils tk-dev curl
 
-      # 3️⃣ Copy qemu-cgc folder and the configure script
-      - name: Copy qemu-cgc folder
+      # 3️⃣ Prepare QEMU-CGC folder
+      - name: Prepare QEMU-CGC folder
         run: |
           mkdir -p qemu-cgc
-          cp -r cgc_env/qemu-cgc/* qemu-cgc/
-          cp cgc_configure_opt qemu-cgc/   # <-- ensure script is inside build dir
+          cp -r cgc_env/qemu-cgc/* qemu-cgc/   # copies everything, including cgc_configure_opt
 
       # 4️⃣ Install pyenv & Python2
       - name: Install pyenv & Python2
@@ -45,8 +44,8 @@ jobs:
           pyenv global 2.7.18
           python2 --version
 
-      # 5️⃣ Build QEMU-CGC 64-bit using cgc_configure_opt
-      - name: Build QEMU-CGC 64-bit (optimized)
+      # 5️⃣ Build QEMU-CGC 64-bit (optimized)
+      - name: Build QEMU-CGC 64-bit
         run: |
           export PATH="$HOME/.pyenv/bin:$PATH"
           eval "$(pyenv init --path)"
@@ -56,24 +55,22 @@ jobs:
           cd qemu-cgc
           chmod +x cgc_configure_opt
 
-          # Use x86_64 target
-          sed -i 's/i386-linux-user/x86_64-linux-user/' cgc_configure_opt
+          # Optional: replace default target if needed
+          sed -i 's/x86_64-linux-user/' cgc_configure_opt
 
-          # Set high file limit
+          # Set resource limits
           ulimit -n 65536
-
-          # Limit virtual memory to ~75% of runner RAM
           MEM_KB=$(grep MemTotal /proc/meminfo | awk '{print $2}')
           MEM_LIMIT=$(( MEM_KB * 75 / 100 ))
           ulimit -v $MEM_LIMIT
 
-          # Determine safe parallel jobs: 1 per 4GB RAM, max 8, max CPU cores
+          # Determine safe parallel jobs
           CPU_CORES=$(nproc)
-          JOBS=$(( MEM_KB / (4*1024*1024) )) # 4GB per job
+          JOBS=$(( MEM_KB / (4*1024*1024) ))
           if [ "$JOBS" -lt 1 ]; then JOBS=1; fi
           if [ "$JOBS" -gt "$CPU_CORES" ]; then JOBS=$CPU_CORES; fi
           if [ "$JOBS" -gt 8 ]; then JOBS=8; fi
-          echo "Using $JOBS parallel jobs for build"
+          echo "Using $JOBS parallel jobs"
 
           # Configure and build
           ./cgc_configure_opt
