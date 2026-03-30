@@ -60,11 +60,15 @@ jobs:
           name: cgc2elf-binary
           path: artifact
 
-      # 8. Create GitHub Release and upload artifact
+      # After downloading artifact
+      - name: Extract cgc2elf artifact
+        run: unzip -o artifact/cgc2elf-binary.zip -d artifact_extracted
+
       - name: Create Release and Upload
         uses: ncipollo/release-action@v1
         with:
           tag: ${{ github.event.inputs.release_tag }}
           name: "cgc2elf x86_64"
+          artifacts: artifact_extracted/cgc2elf   # <- single file now
           token: ${{ secrets.RELEASE_TOKEN }}
-          artifacts: artifact/
+          generateReleaseNotes: false
