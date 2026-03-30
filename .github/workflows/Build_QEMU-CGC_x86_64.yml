@@ -8,53 +8,32 @@ jobs:
     runs-on: self-hosted
 
     steps:
-      # 1️⃣ Prepare QEMU-CGC source
-      - name: Prepare source
+      # 1️⃣ Prepare source
+      - name: Prepare QEMU-CGC source
         run: |
           cd /opt/qemu-cgc/source
           
+      # 2️⃣ Environment setup
+      - name: Set up build environment
+        run: |
+          python3 /opt/qemu-cgc/build_scripts/env_setup.py
 
-      # 2️⃣ Configure QEMU-CGC
+      # 3️⃣ Configure QEMU-CGC
       - name: Configure QEMU-CGC
         run: |
-          cd /opt/qemu-cgc/source
+          python3 /opt/qemu-cgc/build_scripts/configure_qemu.py
 
-          # Enforce x86_64 target explicitly
-          sed -i 's/--target-list=.*$/--target-list=x86_64-linux-user/' cgc_configure_opt
-
-          # Ensure no i386 references remain
-          if grep -q 'i386' cgc_configure_opt; then
-              echo "❌ Found i386 in configure script; aborting"
-              exit 1
-          fi
-
-          # Run configuration with Python2 from pyenv
-          ./cgc_configure_opt --python=$(pyenv which python2)
-
-      # 3️⃣ Build QEMU-CGC safely
+      # 4️⃣ Build QEMU-CGC with Ninja
       - name: Build QEMU-CGC 64-bit
         run: |
-          cd /opt/qemu-cgc/source
+          python3 /opt/qemu-cgc/build_scripts/build_qemu_ninja.py
 
-          # Use safe build: 1 parallel job, retry up to 3 times
-          JOBS=1
-          for attempt in {1..3}; do
-              echo "Attempt $attempt to build QEMU-CGC..."
-              make -j$JOBS qemu-user/qemu64 && break || echo "⚠️ Build failed; retrying..."
-          done
+      # 5️⃣ Copy binary to bin
+      - name: Copy QEMU-CGC binary
+        run: |
+          python3 /opt/qemu-cgc/build_scripts/copy_binary.py
 
-          # Verify that binary exists
-          BIN="/opt/qemu-cgc/bin/qemu-x86_64"
-          mkdir -p /opt/qemu-cgc/bin
-          if [ -f qemu-user/qemu64/qemu-x86_64 ]; then
-              cp qemu-user/qemu64/qemu-x86_64 "$BIN"
-              echo "✅ QEMU-CGC built successfully:"
-              file "$BIN"
-          else
-              echo "❌ Build failed: binary not found!"
-              exit 1
-          fi
-
-      # 4️⃣ Optional: List binary
-      - name: List built binary
-        run: ls -lh /opt/qemu-cgc/bin/qemu-x86_64
+      # 6️⃣ Verify binary
+      - name: Verify QEMU-CGC binary
+        run: |
+          python3 /opt/qemu-cgc/build_scripts/verify_binary.py
