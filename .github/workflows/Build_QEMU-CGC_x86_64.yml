@@ -31,19 +31,51 @@ jobs:
           mkdir -p qemu-cgc
           cp -r cgc_env/qemu-cgc/* qemu-cgc/
 
-      # 4️⃣ Configure and build 64-bit CGC target
+      - name: Install pyenv & Python2
+        run: |
+          # Install dependencies
+          sudo apt update
+          sudo apt install -y build-essential curl git libffi-dev libssl-dev zlib1g-dev \
+          libbz2-dev libreadline-dev libsqlite3-dev wget llvm \
+          libncurses5-dev libncursesw5-dev xz-utils tk-dev
+
+          # Install pyenv
+          curl https://pyenv.run | bash
+
+          # Setup pyenv environment
+          export PATH="$HOME/.pyenv/bin:$PATH"
+          eval "$(pyenv init --path)"
+          eval "$(pyenv init -)"
+          eval "$(pyenv virtualenv-init -)"
+
+          # Install Python2.7
+          pyenv install 2.7.18
+          pyenv global 2.7.18
+
+          # Verify
+          python2 --version
+
       - name: Build QEMU-CGC 64-bit
         run: |
-           cd qemu-cgc
-           chmod +x configure
-           ./configure --python=python2 \
-                      --target-list=x86_64-linux-user/qemu64 \
-                      --disable-werror \
-                      --disable-system \
-                      --disable-tools
+          # Setup pyenv for this step
+          export PATH="$HOME/.pyenv/bin:$PATH"
+          eval "$(pyenv init --path)"
+          eval "$(pyenv init -)"
+          eval "$(pyenv virtualenv-init -)"
 
-           ulimit -n 65536
-           make -j1 qemu64
+          # Prepare source
+          cd qemu-cgc
+          chmod +x configure
+
+          # Configure using python2 from pyenv
+          ./configure --python=python2 \
+                --target-list=x86_64-linux-user \
+                --disable-werror \
+                --disable-system \
+                --disable-tools
+
+          ulimit -n 65536
+          make -j1 qemu-user/qemu64
 
       # 5️⃣ Verify the binary exists
       - name: Verify binary
