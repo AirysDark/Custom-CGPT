@@ -42,36 +42,48 @@ jobs:
       - name: Copy libcgc folder
         run: |
           mkdir -p libcgc
-          cp -r cgc_env/libcgc/* libcgc/
+          cp -r cgc_env/libcgc/* libcgc
 
-      # 4️⃣ Build libcgc (x86_64)
+      # 4️⃣ Build libcgc (Force 64-bit)
       - name: Build libcgc
         run: |
           cd libcgc
+          # Fix standard library symlink if needed
           sudo ln -sf /usr/lib/x86_64-linux-gnu/libstdc++.so.6 /usr/lib/x86_64-linux-gnu/libstdc++.so
+          
+          # Clean previous builds
           rm -rf build64/
           mkdir build64 && cd build64
+          
+          # Configure CMake for 64-bit build
           BUILD64=1 cmake .. -GNinja
-          ninja cgc pov libpov || true  # continue even if some targets fail
+          
+          # Build target binaries
+          ninja cgc pov
 
-      # 5️⃣ Prepare artifact folder
-      - name: Prepare artifact folder
+      # 5️⃣ Verify Build Artifacts
+      - name: Verify Architecture
         run: |
-          mkdir -p artifact/libcgc-x86_64
-          # Copy source folders and files
-          cp -r libcgc/include artifact/libcgc-x86_64/include || true
-          cp -r libcgc/libpov artifact/libcgc-x86_64/libpov
-          cp -r libcgc/pov artifact/libcgc-x86_64/pov
-          cp -r libcgc/tiny-AES128-C artifact/libcgc-x86_64/tiny-AES128-C
-          # Copy compiled binaries
-          cp -r libcgc/build64/*.a artifact/libcgc-x86_64/ || true
-          # Copy any top-level C files
-          cp libcgc/*.c artifact/libcgc-x86_64/ || true
-          cp libcgc/*.S artifact/libcgc-x86_64/ || true
-          cp libcgc/*.h artifact/libcgc-x86_64/ || true
-          # Debug: check directory
-          echo "✅ Artifact folder structure:"
-          tree -L 4 artifact/libcgc-x86_64
+          echo "🔍 Checking shared libraries..."
+          if [ -f libcgc/build64/include/libcgc.so ]; then
+            file libcgc/build64/include/libcgc.so
+          else
+            echo "⚠️ libcgc.so not found"
+          fi
+
+          if [ -f libcgc/build64/include/libpov/libpov.so ]; then
+            file libcgc/build64/include/libpov/libpov.so
+          else
+            echo "⚠️ libpov.so not found"
+          fi
+
+          echo "🔍 Checking a sample challenge binary..."
+          SAMPLE_BIN=$(find libcgc/build64/challenges -type f | head -n 1)
+          if [ -f "$SAMPLE_BIN" ]; then
+            file "$SAMPLE_BIN"
+          else
+            echo "⚠️ No binaries found in build64/challenges"
+          fi
 
       # 6️⃣ Upload artifact
       - name: Upload libcgc-x86_64 artifact
