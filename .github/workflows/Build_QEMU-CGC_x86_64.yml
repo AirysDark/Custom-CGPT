@@ -42,7 +42,7 @@ jobs:
                       --disable-werror \
                       --disable-system \
                       --disable-tools
-          ulimit -s 65532
+          ulimit -n 65536
           ulimit -v unlimited
           make -j2 
 
