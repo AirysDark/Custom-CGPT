@@ -50,7 +50,7 @@ jobs:
       - name: Build QEMU-CGC
         run: |
           cd qemu-cgc
-          chmod +x cgc_configure_opt
+          chmod +x cgc_configure_opt configure
           ./cgc_configure_opt
 
           JOBS=2
