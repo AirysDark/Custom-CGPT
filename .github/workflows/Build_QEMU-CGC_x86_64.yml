@@ -44,8 +44,8 @@ jobs:
           pyenv global 2.7.18
           python2 --version
 
-      # 5️⃣ Build QEMU-CGC 64-bit (adaptive jobs, safe RAM)
-      - name: Build QEMU-CGC 64-bit
+      # 5️⃣ Build QEMU-CGC 64-bit using cgc_configure_opt
+      - name: Build QEMU-CGC 64-bit (optimized)
         run: |
           export PATH="$HOME/.pyenv/bin:$PATH"
           eval "$(pyenv init --path)"
@@ -53,48 +53,42 @@ jobs:
           eval "$(pyenv virtualenv-init -)"
 
           cd qemu-cgc
-          chmod +x configure
-          ./configure --python=python2 \
-                      --target-list=x86_64-linux-user \
-                      --disable-werror \
-                      --disable-system \
-                      --disable-tools
+          chmod +x ../cgc_configure_opt
 
-          # High file descriptor limit
+          # Use x86_64 target
+          sed -i 's/x86_64-linux-user/' ../cgc_configure_opt
+
+          # Set high file limit
           ulimit -n 65536
 
-          # Detect RAM (GB) and CPU cores
+          # Limit virtual memory to ~75% of runner RAM
           MEM_KB=$(grep MemTotal /proc/meminfo | awk '{print $2}')
-          MEM_GB=$(( MEM_KB / 1024 / 1024 ))
+          MEM_LIMIT=$(( MEM_KB * 75 / 100 ))
+          ulimit -v $MEM_LIMIT
+
+          # Determine safe parallel jobs: 1 per 4GB RAM, max 8, max CPU cores
           CPU_CORES=$(nproc)
-          echo "Detected RAM: ${MEM_GB} GB, CPU cores: $CPU_CORES"
+          JOBS=$(( MEM_KB / (4*1024*1024) )) # 4GB per job
+          if [ "$JOBS" -lt 1 ]; then JOBS=1; fi
+          if [ "$JOBS" -gt "$CPU_CORES" ]; then JOBS=$CPU_CORES; fi
+          if [ "$JOBS" -gt 8 ]; then JOBS=8; fi
+          echo "Using $JOBS parallel jobs for build"
 
-          # Compute max parallel jobs: ~2GB RAM per job, limit to cores and max 8
-          MAX_JOBS=$(( MEM_GB / 2 ))
-          if [ "$MAX_JOBS" -gt 8 ]; then MAX_JOBS=8; fi
-          if [ "$MAX_JOBS" -gt "$CPU_CORES" ]; then MAX_JOBS=$CPU_CORES; fi
-          if [ "$MAX_JOBS" -lt 1 ]; then MAX_JOBS=1; fi
-          echo "Using $MAX_JOBS parallel jobs"
+          # Configure and build
+          ../cgc_configure_opt
+          make -j$JOBS qemu-user/qemu64
 
-          # Optional: cap virtual memory per job (~3GB per job)
-          ulimit -v $((3*1024*1024))
-
-          # Build only QEMU user x86_64
-          make -j$MAX_JOBS qemu-user/qemu64
-
-      # 6️⃣ Verify binary
-      - name: Verify binary
-        run: |
-          BIN="qemu-cgc/qemu-user/qemu64/qemu-x86_64"
+          # Verify
+          BIN="qemu-user/qemu64/qemu-x86_64"
           if [ -f "$BIN" ]; then
-            echo "✅ Binary found:"
+            echo "✅ Binary built successfully:"
             file "$BIN"
           else
             echo "⚠️ Binary missing!"
             exit 1
           fi
 
-      # 7️⃣ Upload 64-bit CGC binary
+      # 6️⃣ Upload 64-bit CGC binary
       - name: Upload 64-bit CGC binary
         uses: actions/upload-artifact@v4
         with:
@@ -102,14 +96,14 @@ jobs:
           path: qemu-cgc/qemu-user/qemu64/qemu-x86_64
           if-no-files-found: error
 
-      # 8️⃣ Download artifact (for release step)
+      # 7️⃣ Download artifact (for release step)
       - name: Download qemu-cgc artifact
         uses: actions/download-artifact@v4
         with:
           name: qemu-cgc-64bit
           path: artifact
 
-      # 9️⃣ Create GitHub Release and upload artifact
+      # 8️⃣ Create GitHub Release and upload artifact
       - name: Create Release and Upload
         uses: ncipollo/release-action@v1
         with:
@@ -118,6 +112,6 @@ jobs:
           token: ${{ secrets.RELEASE_TOKEN }}
           artifacts: artifact/
 
-      # 🔟 Optional: Workspace tree (debug)
+      # 9️⃣ Optional: Workspace tree (debug)
       - name: Workspace tree (debug)
         run: tree -L 3 qemu-cgc/qemu-user/qemu64 || true
