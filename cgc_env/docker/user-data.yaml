@@ -1,0 +1,43 @@
+#cloud-config
+# SPDX-License-Identifier: MIT
+# SPDX-FileCopyrightText: 2023 David Turvene <dturvene at gmail>
+#  https://cloudinit.readthedocs.io/en/20.2/topics/examples.html
+#
+
+groups:
+  - cloud-group: [root,sys]
+  - cloud-users
+
+users:
+  - name: dave
+    gecos: console super
+    primary_group: users
+    plain_text_passwd: 'dave'
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    shell: /bin/bash
+    ssh_authorized_keys:
+      - ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQCu8+8x4Ujk4J+syoJqN+ye7quLZeHZmi5DVialS99Lqi7BfSrPzOmJtPnYu0pkEVLsFvCfiMvkGgZkqqj+80mByO0Dos+H2UB0zHWgZI5nd1WQhb4AY8SOaGOpE1lY3KyhNCsbHBNSGUrBhan0SFJ8MQuZ3FqPGOG9qXv8CbLlmOpDxmLPCSupFod7HdfodNOgUrlwoSlyKA0pbgFuqEP9uTwyhpaOazfKQbZGOuUhO5wwM8GFBWuyWarqv9YyYJpf8akNfeiZ9rBttC8XT8wrmiElRqr5XHvMFNpzt7fR0BLCcg4qiuFttuNJiyxQPq3dCHvY+pYu7LP0tzelW/Mr
+  - name: user1
+    gecos: Dummy User 1
+    primary_group: users
+    plain_text_passwd: 'user1'
+    sudo: false
+    shell: /bin/bash
+
+# https://cloudinit.readthedocs.io/en/20.4/topics/modules.html#set-passwords
+chpasswd:
+  list: |
+    user1:user1
+    dave:dave
+  expire: False
+
+# APT package section
+# https://cloudinit.readthedocs.io/en/20.4/topics/examples.html#yaml-examples
+# https://cloudinit.readthedocs.io/en/20.4/topics/modules.html#package-update-upgrade-install
+package_update: true
+packages:
+  - emacs-nox
+  - build-essential
+
+runcmd:
+  - [ timedatectl set-timezone America/New_York ]

@@ -1,0 +1,23 @@
+# https://git-scm.com/docs/gitignore
+# https://github.com/github/gitignore
+# good pattern for small/manageable projects
+
+# ignore all
+*
+
+# unignore only versioned file extensions
+!*.md
+!*.sh
+!env_vars
+!*.Dockerfile
+!*.yaml
+!*.key
+!*.key.pub
+!*.docker
+!*.cfg
+
+# unignore git support
+!.gitignore
+!LICENSE
+
+
