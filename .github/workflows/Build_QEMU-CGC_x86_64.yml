@@ -1,4 +1,4 @@
-name: Build qemu-cgc x86_64 (self-hosted)
+name: Build QEMU-CGC x86_64 (Docker)
 
 on:
   workflow_dispatch:
@@ -6,34 +6,61 @@ on:
 jobs:
   build-qemu:
     runs-on: self-hosted
-
     steps:
-      # 1️⃣ Prepare source
-      - name: Prepare QEMU-CGC source
-        run: |
-          cd /opt/qemu-cgc/source
-          
-      # 2️⃣ Environment setup
-      - name: Set up build environment
-        run: |
-          python3 /opt/qemu-cgc/build_scripts/env_setup.py
 
-      # 3️⃣ Configure QEMU-CGC
-      - name: Configure QEMU-CGC
-        run: |
-          python3 /opt/qemu-cgc/build_scripts/configure_qemu.py
+      # 1️⃣ Checkout repo
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-      # 4️⃣ Build QEMU-CGC with Ninja
-      - name: Build QEMU-CGC 64-bit
+      # 2️⃣ Build inside Docker
+      - name: Build QEMU-CGC inside Docker
         run: |
-          python3 /opt/qemu-cgc/build_scripts/build_qemu.py
+          # Define paths
+          SRC_DIR="$(pwd)/cgc_env/qemu-cgc"
+          BIN_DIR="$(pwd)/qemu-cgc-bin"
+          mkdir -p "$BIN_DIR"
 
-      # 5️⃣ Copy binary to bin
-      - name: Copy QEMU-CGC binary
-        run: |
-          python3 /opt/qemu-cgc/build_scripts/copy_binary.py
+          # Pull a clean Ubuntu 24.04 Docker image
+          docker pull ubuntu:24.04
 
-      # 6️⃣ Verify binary
-      - name: Verify QEMU-CGC binary
-        run: |
-          python3 /opt/qemu-cgc/build_scripts/verify_binary.py
+          # Run container with high file descriptor limit
+          docker run --rm \
+            --ulimit nofile=65535:65535 \
+            -v "$SRC_DIR":/opt/qemu-cgc/source \
+            -v "$BIN_DIR":/opt/qemu-cgc/bin \
+            -w /opt/qemu-cgc/source \
+            ubuntu:24.04 \
+            bash -c "
+              set -e
+              # Install build dependencies
+              apt update && apt install -y \
+                build-essential git ninja-build \
+                libglib2.0-dev libfdt-dev libpixman-1-dev zlib1g-dev \
+                libffi-dev libssl-dev libbz2-dev libreadline-dev libsqlite3-dev \
+                wget llvm libncurses5-dev libncursesw5-dev xz-utils tk-dev curl \
+                python3 python3-pip python3-setuptools
+
+              # Copy /opt/qemu-cgc/source into build dir (already mounted)
+              mkdir -p /opt/qemu-cgc/build
+              cd /opt/qemu-cgc/source
+
+              # Ensure x86_64 only
+              sed -i 's/--target-list=.*$/--target-list=x86_64-linux-user/' cgc_configure_opt
+
+              # Run configure
+              ./cgc_configure_opt
+
+              # Sequential build to avoid too many open files
+              make -j1 qemu-common
+              make -j1 qemu-user
+              make -j1 ui
+              make -j1 tests
+              make -j1 target-x86_64
+
+              # Copy final binary to /opt/qemu-cgc/bin
+              cp qemu-user/qemu64/qemu-x86_64 /opt/qemu-cgc/bin/
+            "
+
+      # 3️⃣ List binary for confirmation
+      - name: List built binary
+        run: ls -l qemu-cgc-bin/
