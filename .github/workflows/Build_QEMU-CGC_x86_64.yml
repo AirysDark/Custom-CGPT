@@ -43,7 +43,7 @@ jobs:
                       --disable-system \
                       --disable-tools
           ulimit -n 65536
-          ninja -j2 
+          make -j1 
 
       # 5️⃣ Verify the binary exists
       - name: Verify binary
