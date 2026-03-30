@@ -26,7 +26,7 @@ jobs:
       # 4️⃣ Build QEMU-CGC with Ninja
       - name: Build QEMU-CGC 64-bit
         run: |
-          python3 /opt/qemu-cgc/build_scripts/build_qemu_ninja.py
+          python3 /opt/qemu-cgc/build_scripts/build_qemu.py
 
       # 5️⃣ Copy binary to bin
       - name: Copy QEMU-CGC binary
