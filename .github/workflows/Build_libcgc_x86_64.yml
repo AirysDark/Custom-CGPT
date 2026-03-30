@@ -46,7 +46,7 @@ jobs:
           mkdir -p libcgc
           cp -r cgc_env/libcgc/* libcgc/
 
-      # 4️⃣ Build libcgc (Force 64-bit)
+      # 4️⃣ Build libcgc (Force 64-bit, static library)
       - name: Build libcgc
         run: |
           cd libcgc
@@ -54,10 +54,10 @@ jobs:
           rm -rf build64/
           mkdir build64 && cd build64
           
-          # Configure for 64-bit
-          BUILD64=1 cmake .. -GNinja
+          # Configure CMake for static library
+          BUILD64=1 cmake .. -GNinja -DBUILD_SHARED_LIBS=OFF
           
-          # Use the target names verified by Ninja
+          # Build cgc and pov targets
           ninja cgc pov
 
       # 5️⃣ Verify Build Artifacts
