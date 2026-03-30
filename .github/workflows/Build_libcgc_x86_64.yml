@@ -38,13 +38,13 @@ jobs:
             pyyaml \
             matplotlib
 
-      # 3️⃣ Copy libcgc folder
+      # 3️⃣ Copy libcgc folder (sources + headers)
       - name: Copy libcgc folder
         run: |
           mkdir -p libcgc
           cp -r cgc_env/libcgc/* libcgc/
 
-      # 4️⃣ Build libcgc
+      # 4️⃣ Build libcgc (x86_64)
       - name: Build libcgc
         run: |
           cd libcgc
@@ -52,32 +52,32 @@ jobs:
           rm -rf build64/
           mkdir build64 && cd build64
           BUILD64=1 cmake .. -GNinja
-          ninja cgc pov || true  # continue even if some targets fail
+          ninja cgc pov libpov || true  # continue even if some targets fail
 
-      # 5️⃣ Find all artifacts
-      - name: Hunt for libcgc build artifacts
-        id: find_artifacts
+      # 5️⃣ Prepare artifact folder
+      - name: Prepare artifact folder
         run: |
-          echo "🔍 Searching for libraries and binaries..."
-          ARTIFACTS=$(find libcgc/build64 -type f \( -name '*.a' -o -executable \))
-          echo "Found files:"
-          echo "$ARTIFACTS"
-          # Save paths for upload
-          echo "paths<<EOF" >> $GITHUB_OUTPUT
-          echo "$ARTIFACTS" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
+          mkdir -p artifact/libcgc-x86_64
+          # Copy source folders and files
+          cp -r libcgc/include artifact/libcgc-x86_64/include || true
+          cp -r libcgc/libpov artifact/libcgc-x86_64/libpov
+          cp -r libcgc/pov artifact/libcgc-x86_64/pov
+          cp -r libcgc/tiny-AES128-C artifact/libcgc-x86_64/tiny-AES128-C
+          # Copy compiled binaries
+          cp -r libcgc/build64/*.a artifact/libcgc-x86_64/ || true
+          # Copy any top-level C files
+          cp libcgc/*.c artifact/libcgc-x86_64/ || true
+          cp libcgc/*.S artifact/libcgc-x86_64/ || true
+          cp libcgc/*.h artifact/libcgc-x86_64/ || true
+          # Debug: check directory
+          echo "✅ Artifact folder structure:"
+          tree -L 4 artifact/libcgc-x86_64
 
-      # 6️⃣ Upload artifacts dynamically
-      - name: Upload libcgc artifacts
+      # 6️⃣ Upload artifact
+      - name: Upload libcgc-x86_64 artifact
         uses: actions/upload-artifact@v4
         with:
           name: libcgc-x86_64
-          path: ${{ steps.find_artifacts.outputs.paths }}
+          path: artifact/libcgc-x86_64
           if-no-files-found: error
           retention-days: 5
-
-      # 7️⃣ Debug Output
-      - name: Workspace Summary
-        run: |
-          echo "✅ Build Complete. Directory Structure:"
-          tree -L 3 libcgc/build64
