@@ -85,11 +85,20 @@ jobs:
             echo "⚠️ No binaries found in build64/challenges"
           fi
 
-      # 6️⃣ Upload artifact
-      - name: Upload libcgc-x86_64 artifact
+      # 6️⃣ Upload Artifacts for cgctk
+      - name: Upload libcgc-64bit-artifacts
         uses: actions/upload-artifact@v4
         with:
           name: libcgc-x86_64
-          path: artifact/libcgc-x86_64
+          path: |
+            libcgc/build64/lib/
+            libcgc/build64/bin/
+            libcgc/include/
           if-no-files-found: error
           retention-days: 5
+
+      # 7️⃣ Debug Output
+      - name: Workspace Summary
+        run: |
+          echo "✅ Build Complete. Directory Structure:"
+          tree -L 3 libcgc/build64
