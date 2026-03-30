@@ -42,7 +42,9 @@ jobs:
                       --disable-werror \
                       --disable-system \
                       --disable-tools
-          make -j$(nproc)
+          ulimit -s 65532
+          ulimit -v unlimited
+          make -j2 
 
       # 5️⃣ Verify the binary exists
       - name: Verify binary
