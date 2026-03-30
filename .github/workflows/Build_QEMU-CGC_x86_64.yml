@@ -1,4 +1,4 @@
-name: Build qemu-cgc x86_64
+name: Build QEMU-CGC x86_64
 
 on:
   workflow_dispatch:
@@ -17,7 +17,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # 2️⃣ Install dependencies (only needed first time)
+      # 2️⃣ Install dependencies
       - name: Install dependencies
         run: |
           sudo apt update
@@ -26,32 +26,25 @@ jobs:
             libffi-dev libssl-dev libbz2-dev libreadline-dev libsqlite3-dev \
             wget llvm libncurses5-dev libncursesw5-dev xz-utils tk-dev curl
 
-      # 3️⃣ Prepare persistent QEMU-CGC folder
-      - name: Prepare persistent folder
+      # 3️⃣ Prepare QEMU-CGC folder
+      - name: Prepare QEMU-CGC folder
         run: |
-          mkdir -p /opt/qemu-cgc
-          if [ ! -d /opt/qemu-cgc/source ]; then
-              echo "Copying QEMU-CGC source to persistent folder..."
-              cp -r cgc_env/qemu-cgc /opt/qemu-cgc/source
-          fi
+          cd /opt/qemu-cgc/source
+          chmod +x configure cgc_configure_opt
 
-      # 4️⃣ Install pyenv & Python2 (only first run)
+      # 4️⃣ Install pyenv & Python2
       - name: Install pyenv & Python2
         run: |
-          if [ ! -d "$HOME/.pyenv" ]; then
-              curl https://pyenv.run | bash
-          fi
+          curl https://pyenv.run | bash
           export PATH="$HOME/.pyenv/bin:$PATH"
           eval "$(pyenv init --path)"
           eval "$(pyenv init -)"
           eval "$(pyenv virtualenv-init -)"
-          if ! pyenv versions | grep -q 2.7.18; then
-              pyenv install -s 2.7.18
-          fi
+          pyenv install -s 2.7.18
           pyenv global 2.7.18
           python2 --version
 
-      # 5️⃣ Configure & Build QEMU-CGC safely
+      # 5️⃣ Configure & Build QEMU-CGC x86_64
       - name: Build QEMU-CGC 64-bit
         run: |
           export PATH="$HOME/.pyenv/bin:$PATH"
@@ -60,35 +53,35 @@ jobs:
           eval "$(pyenv virtualenv-init -)"
 
           cd /opt/qemu-cgc/source
-          chmod +x configure cgc_configure_opt
 
           # Use optimized configure script for x86_64
-          sed -i 's/i386-linux-user/x86_64-linux-user/' cgc_configure_opt
+          sed -i 's/i386-linux-user/x86_64-linux-user/g' cgc_configure_opt
           ./cgc_configure_opt
 
-          # Determine safe parallel jobs (max 2 for stability)
+          # Safe parallel jobs
           JOBS=2
           echo "Using $JOBS parallel jobs"
 
-          # Retry build in case of transient segmentation faults
+          # Retry build in case of transient segfaults
           for i in {1..2}; do
               echo "Attempt $i to build QEMU-CGC..."
               make -j$JOBS qemu-user/qemu64 && break || echo "⚠️ Segfault detected, retrying..."
           done
 
+          # Move binary to /opt/qemu-cgc
+          cp qemu-user/qemu64/qemu-x86_64 /opt/qemu-cgc/qemu-x86_64
+
           # Verify binary
-          BIN="qemu-user/qemu64/qemu-x86_64"
+          BIN="/opt/qemu-cgc/qemu-x86_64"
           if [ -f "$BIN" ]; then
               echo "✅ Binary built successfully:"
               file "$BIN"
-              # Copy binary to persistent folder
-              cp "$BIN" /opt/qemu-cgc/qemu-x86_64
           else
               echo "⚠️ Binary missing!"
               exit 1
           fi
 
-      # 6️⃣ Upload 64-bit CGC binary (optional)
+      # 6️⃣ Upload 64-bit CGC binary as artifact
       - name: Upload 64-bit CGC binary
         uses: actions/upload-artifact@v4
         with:
@@ -107,4 +100,4 @@ jobs:
 
       # 8️⃣ Optional: Workspace tree (debug)
       - name: Workspace tree (debug)
-        run: tree -L 3 /opt/qemu-cgc || true
+        run: tree -L 3 /opt/qemu-cgc/source || true
