@@ -1,9 +1,14 @@
 name: Build libcgc x86_64
 
 on:
-  push:
-    branches: [main]
+#  push:
+#    branches: [main]
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Release tag to create (e.g., v1.0.0)'
+        required: true
+        default: ''
 
 jobs:
   build-libcgc-64bit:
@@ -96,6 +101,22 @@ jobs:
             libcgc/include/
           if-no-files-found: error
           retention-days: 5
+
+                # 7. Download the artifact from the build job
+      - name: Download libcgc artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: libcgc-binary
+          path: artifact
+
+      # 8. Create GitHub Release and upload artifact
+      - name: Create Release and Upload
+        uses: ncipollo/release-action@v1
+        with:
+          tag: ${{ github.event.inputs.release_tag }}
+          name: "libcgc x86_64"
+          token: ${{ secrets.RELEASE_TOKEN }}
+          artifacts: artifact/
 
       # 7. Debug Output
       - name: Workspace Summary
