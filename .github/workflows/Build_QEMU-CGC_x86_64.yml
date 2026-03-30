@@ -38,11 +38,9 @@ jobs:
           chmod +x configure
           ./configure --python=python2 \
                       --target-list=x86_64-linux-user \
-                      --static \
                       --disable-werror \
                       --disable-system \
                       --disable-tools
-          ulimit -n 65536
           make -j1 
 
       # 5️⃣ Verify the binary exists
