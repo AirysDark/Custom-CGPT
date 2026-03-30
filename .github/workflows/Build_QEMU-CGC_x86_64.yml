@@ -35,6 +35,7 @@ jobs:
       - name: Build QEMU-CGC 64-bit
         run: |
           cd qemu-cgc
+          chmod +x configure
           ./configure --python=python2 \
                       --target-list=x86_64-linux-user \
                       --static \
