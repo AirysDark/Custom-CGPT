@@ -1,4 +1,4 @@
-name: Build QEMU-CGC x86_64 (self run Docker)
+name: Build QEMU-CGC x86_64 (manual Docker run)
 
 on:
   workflow_dispatch:
@@ -8,22 +8,22 @@ jobs:
     runs-on: self-hosted
     steps:
 
-      # 1️⃣ Checkout repo
+      # 1️⃣ Checkout repository
       - name: Checkout repository
         uses: actions/checkout@v4
 
       # 2️⃣ Build inside Docker
       - name: Build QEMU-CGC inside Docker
         run: |
-          # Define paths
+          # Paths
           SRC_DIR="$(pwd)/cgc_env/qemu-cgc"
           BIN_DIR="$(pwd)/qemu-cgc-bin"
           mkdir -p "$BIN_DIR"
 
-          # Pull a clean Ubuntu 24.04 Docker image
+          # Pull Docker image
           docker pull ubuntu:24.04
 
-          # Run container with high file descriptor limit
+          # Run build in container
           docker run --rm \
             --ulimit nofile=65535:65535 \
             -v "$SRC_DIR":/opt/qemu-cgc/source \
@@ -32,7 +32,8 @@ jobs:
             ubuntu:24.04 \
             bash -c "
               set -e
-              # Install build dependencies
+
+              # Install dependencies
               apt update && apt install -y \
                 build-essential git ninja-build \
                 libglib2.0-dev libfdt-dev libpixman-1-dev zlib1g-dev \
@@ -40,27 +41,26 @@ jobs:
                 wget llvm libncurses5-dev libncursesw5-dev xz-utils tk-dev curl \
                 python3 python3-pip python3-setuptools
 
-              # Copy /opt/qemu-cgc/source into build dir (already mounted)
-              mkdir -p /opt/qemu-cgc/build
-              cd /opt/qemu-cgc/source
+              # Ensure configure script is executable
+              chmod +x cgc_configure_opt
 
-              # Ensure x86_64 only
+              # Force x86_64 target
               sed -i 's/--target-list=.*$/--target-list=x86_64-linux-user/' cgc_configure_opt
 
               # Run configure
               ./cgc_configure_opt
 
-              # Sequential build to avoid too many open files
+              # Sequential build to avoid open file limits
               make -j1 qemu-common
               make -j1 qemu-user
               make -j1 ui
               make -j1 tests
               make -j1 target-x86_64
 
-              # Copy final binary to /opt/qemu-cgc/bin
+              # Copy final binary
               cp qemu-user/qemu64/qemu-x86_64 /opt/qemu-cgc/bin/
             "
 
-      # 3️⃣ List binary for confirmation
+      # 3️⃣ Confirm binary exists
       - name: List built binary
         run: ls -l qemu-cgc-bin/
