@@ -8,11 +8,7 @@ jobs:
     runs-on: self-hosted
     steps:
 
-      # 1️⃣ Checkout repository
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      # 2️⃣ Build QEMU-CGC inside Docker
+      # 1️⃣ Build QEMU-CGC inside Docker
       - name: Build QEMU-CGC inside Docker
         run: |
           # Paths on the runner
@@ -32,6 +28,7 @@ jobs:
             ubuntu:24.04 \
             bash -c "
               set -e
+
               # Install build dependencies
               apt update && apt install -y \
                 build-essential git ninja-build \
@@ -49,17 +46,17 @@ jobs:
               # Run configure
               ./cgc_configure_opt
 
-              # Build sequentially to avoid FD exhaustion
+              # Sequential build to avoid FD exhaustion
               make -j1 qemu-common
               make -j1 qemu-user
               make -j1 ui
               make -j1 tests
               make -j1 target-x86_64
 
-              # Copy final binary
+              # Copy final binary to output
               cp qemu-user/qemu64/qemu-x86_64 /opt/qemu-cgc/bin/
             "
 
-      # 3️⃣ List built binary for verification
+      # 2️⃣ List built binary for verification
       - name: List built binary
         run: ls -l $HOME/qemu-cgc-bin/
