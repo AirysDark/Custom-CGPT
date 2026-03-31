@@ -41,7 +41,6 @@ jobs:
         run: |
           SRC_DIR="/opt/qemu-cgc/source"
           BIN_DIR="/qemu-cgc-bin"
-          mkdir -p "$BIN_DIR"
 
           docker run --rm \
             --ulimit nofile=65535:65535 \
