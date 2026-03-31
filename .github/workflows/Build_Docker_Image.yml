@@ -1,4 +1,4 @@
-name: Build Docker Image
+name: Build and Publish QEMU-CGC Docker Image
 
 # Manual trigger only
 on:
@@ -13,25 +13,35 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # 2️⃣ Build the Docker image from your GitHub folder
+      # 2️⃣ Log in to GitHub Container Registry (GCR)
+      - name: Log in to GHCR
+        uses: docker/login-action@v2
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.secrets.RELEASE_TOKEN }}
+
+      # 3️⃣ Build the Docker image from your GitHub folder
       - name: Build Docker image
         run: |
-          # Image name
-          export D_IMG=custom-cgpt-qemu
-
-          # Folder containing your Dockerfile
+          export IMAGE_NAME=ghcr.io/${{ github.repository_owner }}/custom-cgpt-qemu:latest
           DOCKER_DIR=cgc_env/docker
 
-          # Verify Dockerfile exists
           if [ ! -f "$DOCKER_DIR/qemu.Dockerfile" ]; then
             echo "Dockerfile not found in $DOCKER_DIR"
             exit 1
           fi
 
-          # Build the Docker image
-          docker build -f "$DOCKER_DIR/qemu.Dockerfile" -t $D_IMG "$DOCKER_DIR"
+          docker build -f "$DOCKER_DIR/qemu.Dockerfile" -t $IMAGE_NAME "$DOCKER_DIR"
 
-      # 3️⃣ List the built image for confirmation
+      # 4️⃣ Push the Docker image to GHCR
+      - name: Push Docker image
+        run: |
+          export IMAGE_NAME=ghcr.io/${{ github.repository_owner }}/custom-cgpt-qemu:latest
+          docker push $IMAGE_NAME
+
+      # 5️⃣ Verify the Docker image is available
       - name: Verify Docker image
         run: |
+          docker pull ghcr.io/${{ github.repository_owner }}/custom-cgpt-qemu:latest
           docker images | grep custom-cgpt-qemu
