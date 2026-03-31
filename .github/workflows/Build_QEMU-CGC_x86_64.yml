@@ -6,20 +6,43 @@ on:
 jobs:
   build-qemu:
     runs-on: self-hosted
-    steps:
 
-      # 1️⃣ Build QEMU-CGC inside Docker
+    steps:
+      # 1️⃣ Confirm the source folder exists
+      - name: Check source folder
+        run: |
+          SRC_DIR="/opt/qemu-cgc/source"
+          if [ ! -f "$SRC_DIR/cgc_configure_opt" ]; then
+            echo "Error: cgc_configure_opt not found in $SRC_DIR"
+            exit 1
+          fi
+          ls -l "$SRC_DIR"
+
+      # 2️⃣ Pull Docker image
+      - name: Pull Ubuntu 24.04
+        run: docker pull ubuntu:24.04
+
+      # 3️⃣ Cache apt packages
+      - name: Cache apt packages
+        uses: actions/cache@v3
+        with:
+          path: /var/cache/apt/archives
+          key: apt-cache-ubuntu-24-04
+
+      # 4️⃣ Cache pip packages
+      - name: Cache pip packages
+        uses: actions/cache@v3
+        with:
+          path: ~/.cache/pip
+          key: pip-cache-ubuntu-24-04
+
+      # 5️⃣ Build inside Docker
       - name: Build QEMU-CGC inside Docker
         run: |
-          # Paths on the runner
-          SRC_DIR="$HOME/opt/qemu-cgc/source"
-          BIN_DIR="$HOME/qemu-cgc-bin"
+          SRC_DIR="/opt/qemu-cgc/source"
+          BIN_DIR="/qemu-cgc-bin"
           mkdir -p "$BIN_DIR"
 
-          # Pull Ubuntu 24.04 Docker image
-          docker pull ubuntu:24.04
-
-          # Run container with source mounted
           docker run --rm \
             --ulimit nofile=65535:65535 \
             -v "$SRC_DIR":/opt/qemu-cgc/source \
@@ -29,15 +52,15 @@ jobs:
             bash -c "
               set -e
 
-              # Install build dependencies
-              apt update && apt install -y \
+              # Install build dependencies (cached)
+              apt update && DEBIAN_FRONTEND=noninteractive apt install -y \
                 build-essential git ninja-build \
                 libglib2.0-dev libfdt-dev libpixman-1-dev zlib1g-dev \
                 libffi-dev libssl-dev libbz2-dev libreadline-dev libsqlite3-dev \
                 wget llvm libncurses5-dev libncursesw5-dev xz-utils tk-dev curl \
                 python3 python3-pip python3-setuptools
 
-              # Ensure configure script is executable
+              # Make configure executable
               chmod +x cgc_configure_opt
 
               # Restrict target to x86_64
@@ -46,17 +69,17 @@ jobs:
               # Run configure
               ./cgc_configure_opt
 
-              # Sequential build to avoid FD exhaustion
+              # Build sequentially
               make -j1 qemu-common
               make -j1 qemu-user
               make -j1 ui
               make -j1 tests
               make -j1 target-x86_64
 
-              # Copy final binary to output
+              # Copy final binary
               cp qemu-user/qemu64/qemu-x86_64 /opt/qemu-cgc/bin/
             "
 
-      # 2️⃣ List built binary for verification
+      # 6️⃣ List built binary
       - name: List built binary
-        run: ls -l $HOME/qemu-cgc-bin/
+        run: ls -l /home/airysdark/qemu-cgc-bin/
