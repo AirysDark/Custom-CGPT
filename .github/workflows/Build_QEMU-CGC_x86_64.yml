@@ -22,34 +22,48 @@ jobs:
       - name: Pull Ubuntu 24.04
         run: docker pull ubuntu:24.04
 
-      # 3️⃣ Cache apt packages
+      # 3️⃣ Cache apt packages on the runner
       - name: Cache apt packages
         uses: actions/cache@v3
         with:
           path: /var/cache/apt/archives
           key: apt-cache-ubuntu-24-04
 
-      # 4️⃣ Cache pip packages
+      # 4️⃣ Cache pip packages on the runner
       - name: Cache pip packages
         uses: actions/cache@v3
         with:
           path: ~/.cache/pip
           key: pip-cache-ubuntu-24-04
 
-      # 5️⃣ Build inside Docker
+      # 5️⃣ Cache QEMU build directory on the runner
+      - name: Cache QEMU build artifacts
+        uses: actions/cache@v3
+        with:
+          path: /opt/qemu-cgc/build
+          key: qemu-build-cache-x86_64
+
+      # 6️⃣ Build QEMU inside Docker with mounted caches
       - name: Build QEMU-CGC inside Docker
         run: |
           SRC_DIR="/opt/qemu-cgc/source"
           BIN_DIR="/qemu-cgc-bin"
+          BUILD_DIR="/opt/qemu-cgc/build"
+
+          mkdir -p "$BIN_DIR"
+          mkdir -p "$BUILD_DIR"
 
           docker run --rm \
             --ulimit nofile=65535:65535 \
             -v "$SRC_DIR":/opt/qemu-cgc/source \
             -v "$BIN_DIR":/opt/qemu-cgc/bin \
+            -v "$BUILD_DIR":/opt/qemu-cgc/build \
+            -v /var/cache/apt/archives:/var/cache/apt/archives \
+            -v $HOME/.cache/pip:/root/.cache/pip \
             -w /opt/qemu-cgc/source \
             ubuntu:24.04 \
             bash -c "
-              set -e
+              set -euxo pipefail
 
               # Install build dependencies (cached)
               apt update && DEBIAN_FRONTEND=noninteractive apt install -y \
@@ -68,17 +82,17 @@ jobs:
               # Run configure
               ./cgc_configure_opt
 
-              # Build sequentially
-              make -j1 qemu-common
-              make -j1 qemu-user
-              make -j1 ui
-              make -j1 tests
-              make -j1 target-x86_64
+              # Build using cached objects
+              make -j$(nproc) qemu-common
+              make -j$(nproc) qemu-user
+              make -j$(nproc) ui
+              make -j$(nproc) tests
+              make -j$(nproc) target-x86_64
 
               # Copy final binary
               cp qemu-user/qemu64/qemu-x86_64 /opt/qemu-cgc/bin/
             "
 
-      # 6️⃣ List built binary
+      # 7️⃣ List built binary
       - name: List built binary
-        run: ls -l /home/airysdark/qemu-cgc-bin/
+        run: ls -l /qemu-cgc-bin/
