@@ -1,4 +1,4 @@
-name: Build QEMU-CGC x86_64 (Docker)
+name: Build QEMU-CGC x86_64 (self run Docker)
 
 on:
   workflow_dispatch:
