@@ -54,7 +54,7 @@ jobs:
             bash -c "
               set -e
               # Ensure configure script is executable
-              chmod +x cgc_configure_opt configure
+              
 
               # Restrict target to x86_64
               sed -i 's/--target-list=.*$/--target-list=x86_64-linux-user/' cgc_configure_opt
