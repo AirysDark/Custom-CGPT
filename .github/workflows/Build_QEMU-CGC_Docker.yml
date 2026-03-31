@@ -47,7 +47,7 @@ jobs:
             custom-cgpt-qemu \
             bash -c "
               set -e
-              chmod +x cgc_configure_opt
+              
               sed -i 's/--target-list=.*$/--target-list=x86_64-linux-user/' cgc_configure_opt
               ./cgc_configure_opt
               make -j1 qemu-common
