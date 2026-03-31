@@ -1,4 +1,4 @@
-name: Build QEMU-CGC x86_64 (manual Docker run)
+name: Build QEMU-CGC x86_64 (self-run Docker)
 
 on:
   workflow_dispatch:
@@ -12,18 +12,18 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # 2️⃣ Build inside Docker
+      # 2️⃣ Build QEMU-CGC inside Docker
       - name: Build QEMU-CGC inside Docker
         run: |
-          # Paths
-          SRC_DIR="$(pwd)/cgc_env/qemu-cgc"
-          BIN_DIR="$(pwd)/qemu-cgc-bin"
+          # Paths on the runner
+          SRC_DIR="$HOME/opt/qemu-cgc/source"
+          BIN_DIR="$HOME/qemu-cgc-bin"
           mkdir -p "$BIN_DIR"
 
-          # Pull Docker image
+          # Pull Ubuntu 24.04 Docker image
           docker pull ubuntu:24.04
 
-          # Run build in container
+          # Run container with source mounted
           docker run --rm \
             --ulimit nofile=65535:65535 \
             -v "$SRC_DIR":/opt/qemu-cgc/source \
@@ -32,8 +32,7 @@ jobs:
             ubuntu:24.04 \
             bash -c "
               set -e
-
-              # Install dependencies
+              # Install build dependencies
               apt update && apt install -y \
                 build-essential git ninja-build \
                 libglib2.0-dev libfdt-dev libpixman-1-dev zlib1g-dev \
@@ -44,13 +43,13 @@ jobs:
               # Ensure configure script is executable
               chmod +x cgc_configure_opt
 
-              # Force x86_64 target
+              # Restrict target to x86_64
               sed -i 's/--target-list=.*$/--target-list=x86_64-linux-user/' cgc_configure_opt
 
               # Run configure
               ./cgc_configure_opt
 
-              # Sequential build to avoid open file limits
+              # Build sequentially to avoid FD exhaustion
               make -j1 qemu-common
               make -j1 qemu-user
               make -j1 ui
@@ -61,6 +60,6 @@ jobs:
               cp qemu-user/qemu64/qemu-x86_64 /opt/qemu-cgc/bin/
             "
 
-      # 3️⃣ Confirm binary exists
+      # 3️⃣ List built binary for verification
       - name: List built binary
-        run: ls -l qemu-cgc-bin/
+        run: ls -l $HOME/qemu-cgc-bin/
