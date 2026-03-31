@@ -1,34 +1,79 @@
-name: Manual Docker QEMU-CGC Build
+name: Build QEMU-CGC Docker Image and Binary
 
-# Trigger only manually from GitHub UI
+# Manual trigger only
 on:
   workflow_dispatch:
 
 jobs:
-  docker-qemu-build:
+  build-docker:
     runs-on: ubuntu-24.04
 
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
-      with:
-        fetch-depth: 1
+      # 1️⃣ Checkout repository
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-    - name: Build Docker image
-      run: |
-        docker build -t custom-cgpt-qemu \
-          -f ./cgc_env/docker/qemu.Dockerfile \
-          ./cgc_env/docker
+      # 2️⃣ Build the Docker image from your GitHub folder
+      - name: Build Docker image
+        run: |
+          # Image name
+          export D_IMG=custom-cgpt-qemu
 
-    - name: Make QEMU build script executable
-      run: |
-        chmod +x ./qemu-cgc/cgc_configure_opt
-        dos2unix ./qemu-cgc/cgc_configure_opt || echo "No dos2unix installed"
+          # Folder containing your Dockerfile
+          DOCKER_DIR=cgc_env/docker
 
-    - name: Run QEMU-CGC build inside Docker
-      run: |
-        docker run --rm \
-          -v ${{ github.workspace }}/qemu-cgc:/workspace \
-          -w /workspace \
-          custom-cgpt-qemu \
-          /bin/bash -c "./cgc_configure_opt && make -j$(nproc) qemu-user/qemu64"
+          # Verify Dockerfile exists
+          if [ ! -f "$DOCKER_DIR/qemu.Dockerfile" ]; then
+            echo "Dockerfile not found in $DOCKER_DIR"
+            exit 1
+          fi
+
+          # Build the Docker image
+          docker build -f "$DOCKER_DIR/qemu.Dockerfile" -t $D_IMG "$DOCKER_DIR"
+
+      # 3️⃣ List the built image for confirmation
+      - name: Verify Docker image
+        run: |
+          docker images | grep custom-cgpt-qemu
+
+      # 4️⃣ Build QEMU-CGC inside Docker
+      - name: Build QEMU-CGC Binary inside Docker
+        run: |
+          SRC_DIR="$(pwd)/cgc_env/qemu-cgc"
+          BIN_DIR="$(pwd)/qemu-cgc-bin"
+          mkdir -p "$BIN_DIR"
+
+          echo "Running QEMU-CGC build inside Docker..."
+
+          docker run --rm \
+            --ulimit nofile=65535:65535 \
+            -v "$SRC_DIR":/opt/qemu-cgc/source \
+            -v "$BIN_DIR":/opt/qemu-cgc/bin \
+            -w /opt/qemu-cgc/source \
+            custom-cgpt-qemu \
+            bash -c "
+              set -e
+              # Ensure configure script is executable
+              chmod +x cgc_configure_opt
+
+              # Restrict target to x86_64
+              sed -i 's/--target-list=.*$/--target-list=x86_64-linux-user/' cgc_configure_opt
+
+              # Run configure
+              ./cgc_configure_opt
+
+              # Sequential build to avoid FD exhaustion
+              make -j1 qemu-common
+              make -j1 qemu-user
+              make -j1 ui
+              make -j1 tests
+              make -j1 target-x86_64
+
+              # Copy final binary to mounted output folder
+              cp qemu-user/qemu64/qemu-x86_64 /opt/qemu-cgc/bin/
+            "
+
+      # 5️⃣ List built binary for verification
+      - name: Verify QEMU-CGC Binary
+        run: |
+          ls -l qemu-cgc-bin/
