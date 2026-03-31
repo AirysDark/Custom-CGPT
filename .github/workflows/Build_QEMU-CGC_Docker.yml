@@ -1,0 +1,61 @@
+name: Build QEMU-CGC Docker
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Release tag (e.g., v1.0.0)"
+        required: true
+        default: "v1.0.0-docker"
+
+jobs:
+  docker-qemu-build:
+    runs-on: ubuntu-24.04
+
+    steps:
+      # 1️⃣ Checkout repo
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # 2️⃣ Build Docker image
+      - name: Build Docker image
+        run: |
+          docker build -t custom-cgpt-qemu ./cgc_env/docker
+
+      # 3️⃣ Build QEMU-CGC inside Docker
+      - name: Build QEMU-CGC in Docker
+        run: |
+          docker run --rm \
+            -v ${{ github.workspace }}/cgc_env/qemu-cgc:/src/qemu-cgc \
+            -w /src/qemu-cgc \
+            custom-cgpt-qemu \
+            /bin/sh -c "./cgc_configure_opt && make -j$(nproc) qemu-user/x86_64-linux-user"
+
+      # 4️⃣ Verify QEMU-CGC binary
+      - name: Verify binary
+        run: |
+          BIN="cgc_env/qemu-cgc/qemu-user/x86_64-linux-user/qemu-x86_64"
+          if [ -f "$BIN" ]; then
+            echo "✅ Binary exists:"
+            file "$BIN"
+          else
+            echo "❌ Binary not found!"
+            exit 1
+          fi
+
+      # 5️⃣ Upload artifact
+      - name: Upload QEMU-CGC binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: qemu-cgc-x86_64
+          path: cgc_env/qemu-cgc/qemu-user/x86_64-linux-user/qemu-x86_64
+          if-no-files-found: error
+
+      # 6️⃣ Create Release
+      - name: Create GitHub Release
+        uses: ncipollo/release-action@v1
+        with:
+          tag: ${{ github.event.inputs.release_tag }}
+          name: "QEMU-CGC x86_64 Docker"
+          token: ${{ secrets.RELEASE_TOKEN }}
+          artifacts: cgc_env/qemu-cgc/qemu-user/x86_64-linux-user/qemu-x86_64
