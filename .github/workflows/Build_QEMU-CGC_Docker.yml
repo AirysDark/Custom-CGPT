@@ -1,6 +1,5 @@
 name: Build QEMU-CGC Docker Image and Binary
 
-# Manual trigger only
 on:
   workflow_dispatch:
 
@@ -9,71 +8,56 @@ jobs:
     runs-on: ubuntu-24.04
 
     steps:
-      # 1️⃣ Checkout repository
+      # 1️⃣ Checkout the repository
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # 2️⃣ Build the Docker image from your GitHub folder
+      # 2️⃣ Build the Docker image
       - name: Build Docker image
         run: |
-          # Image name
           export D_IMG=custom-cgpt-qemu
-
-          # Folder containing your Dockerfile
           DOCKER_DIR=cgc_env/docker
 
-          # Verify Dockerfile exists
           if [ ! -f "$DOCKER_DIR/qemu.Dockerfile" ]; then
             echo "Dockerfile not found in $DOCKER_DIR"
             exit 1
           fi
 
-          # Build the Docker image
           docker build -f "$DOCKER_DIR/qemu.Dockerfile" -t $D_IMG "$DOCKER_DIR"
 
-      # 3️⃣ List the built image for confirmation
+      # 3️⃣ Verify Docker image
       - name: Verify Docker image
-        run: |
-          docker images | grep custom-cgpt-qemu
+        run: docker images | grep custom-cgpt-qemu
 
       # 4️⃣ Build QEMU-CGC inside Docker
       - name: Build QEMU-CGC Binary inside Docker
         run: |
-          SRC_DIR="$(pwd)/cgc_env/qemu-cgc"
-          BIN_DIR="$(pwd)/qemu-cgc-bin"
+          # Use repo-relative paths on the runner
+          SRC_DIR="$(pwd)/cgc_env/qemu-cgc"     # This is already in the repo
+          BIN_DIR="$(pwd)/qemu-cgc-bin"         # Output inside the runner
           mkdir -p "$BIN_DIR"
 
           echo "Running QEMU-CGC build inside Docker..."
 
           docker run --rm \
             --ulimit nofile=65535:65535 \
-            -v "$SRC_DIR":/opt/qemu-cgc/source \
-            -v "$BIN_DIR":/opt/qemu-cgc/bin \
-            -w /opt/qemu-cgc/source \
+            -v "$SRC_DIR":/qemu-cgc \
+            -v "$BIN_DIR":/qemu-cgc-bin \
+            -w /qemu-cgc \
             custom-cgpt-qemu \
             bash -c "
               set -e
-              # Ensure configure script is executable
-              
-
-              # Restrict target to x86_64
+              chmod +x cgc_configure_opt
               sed -i 's/--target-list=.*$/--target-list=x86_64-linux-user/' cgc_configure_opt
-
-              # Run configure
               ./cgc_configure_opt
-
-              # Sequential build to avoid FD exhaustion
               make -j1 qemu-common
               make -j1 qemu-user
               make -j1 ui
               make -j1 tests
               make -j1 target-x86_64
-
-              # Copy final binary to mounted output folder
-              cp qemu-user/qemu64/qemu-x86_64 /opt/qemu-cgc/bin/
+              cp qemu-user/qemu64/qemu-x86_64 /qemu-cgc-bin/
             "
 
-      # 5️⃣ List built binary for verification
+      # 5️⃣ Verify output binary
       - name: Verify QEMU-CGC Binary
-        run: |
-          ls -l qemu-cgc-bin/
+        run: ls -l qemu-cgc-bin/
