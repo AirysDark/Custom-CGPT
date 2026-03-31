@@ -1,4 +1,4 @@
-name: Build QEMU-CGC Docker Image
+name: Build Docker Image
 
 # Manual trigger only
 on:
